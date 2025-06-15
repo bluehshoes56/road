@@ -1,0 +1,14 @@
+# COMMAND ----------
+print("=== DEBUGGING ACTUAL DATASET ===")
+
+print(f"Dataset type: {type(gbs_mids_joined)}")
+print(f"Total rows: {gbs_mids_joined.count()}")
+
+unique_merchants = gbs_mids_joined.select("merchant_key").distinct()
+print(f"Unique merchant count: {unique_merchants.count()}")
+
+print("\nSample merchant keys:")
+gbs_mids_joined.select("merchant_key").distinct().limit(10).show()
+
+print("\nMonth range in dataset:")
+gbs_mids_joined.select("txn_year_month").distinct().orderBy("txn_year_month").show(50)
