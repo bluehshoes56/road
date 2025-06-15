@@ -1,49 +1,261 @@
 # COMMAND ----------
-from pyspark.sql.functions import col, countDistinct
+# True Constant Merchant Analysis - Fixed Logic
+# Ensures merchant counts remain constant across all months in each period
 
-print("=== DEBUGGING FLAG LOGIC ===")
+from pyspark.sql.functions import col, countDistinct, sum as spark_sum, avg, when, lit, broadcast
+from datetime import datetime
+import pandas as pd
 
-# Check available months in your dataset
-available_months = gbs_mids_joined.select("txn_year_month").distinct().orderBy("txn_year_month").collect()
-available_months_list = [row.txn_year_month for row in available_months]
-print(f"Available months: {available_months_list}")
+print("Creating TRUE constant merchant sample analysis")
 
-# Our defined periods
+# COMMAND ----------
+# Define time periods
 period1_months = [202012, 202101, 202102, 202103, 202104, 202105, 202106, 
                   202107, 202108, 202109, 202110, 202111, 202112, 
-                  202201, 202202, 202203]  # 16 months
+                  202201, 202202, 202203]  # Dec 2020 - Mar 2022 (16 months)
 
 period2_months = [202101, 202102, 202103, 202104, 202105, 202106, 
                   202107, 202108, 202109, 202110, 202111, 202112, 
-                  202201, 202202]  # 14 months
+                  202201, 202202]  # Jan 2021 - Feb 2022 (14 months)
 
-print(f"Period 1 (16-month): {period1_months}")
-print(f"Period 2 (14-month): {period2_months}")
-
-# Check which months are actually available
-period1_in_data = [m for m in period1_months if m in available_months_list]
-period2_in_data = [m for m in period2_months if m in available_months_list]
-
-print(f"Period 1 months in data: {period1_in_data}")
-print(f"Period 2 months in data: {period2_in_data}")
-print(f"Missing from Period 1: {set(period1_months) - set(period1_in_data)}")
-print(f"Missing from Period 2: {set(period2_months) - set(period2_in_data)}")
+print(f"Period 1 (16 months): {period1_months[0]} to {period1_months[-1]}")
+print(f"Period 2 (14 months): {period2_months[0]} to {period2_months[-1]}")
 
 # COMMAND ----------
-# Check merchant presence distributions
+# Create merchant lists that are present in ALL months of each period
+print("Identifying truly constant merchants...")
+
+# For 16-month period: merchants present in ALL 16 months
 period1_data = gbs_mids_joined.filter(col("txn_year_month").isin(period1_months))
+merchants_16m_counts = period1_data.groupBy("merchant_key").agg(
+    countDistinct("txn_year_month").alias("months_present")
+)
+constant_merchants_16m = merchants_16m_counts.filter(col("months_present") == 16).select("merchant_key")
+
+print(f"Merchants present in ALL 16 months: {constant_merchants_16m.count():,}")
+
+# For 14-month period: merchants present in ALL 14 months  
 period2_data = gbs_mids_joined.filter(col("txn_year_month").isin(period2_months))
-
-period1_presence = period1_data.groupBy("merchant_key").agg(
+merchants_14m_counts = period2_data.groupBy("merchant_key").agg(
     countDistinct("txn_year_month").alias("months_present")
 )
+constant_merchants_14m = merchants_14m_counts.filter(col("months_present") == 14).select("merchant_key")
 
-period2_presence = period2_data.groupBy("merchant_key").agg(
-    countDistinct("txn_year_month").alias("months_present")
-)
+print(f"Merchants present in ALL 14 months: {constant_merchants_14m.count():,}")
 
-print("Period 1 - Merchant distribution by months present:")
-period1_presence.groupBy("months_present").count().orderBy("months_present").show(20)
+# COMMAND ----------
+# Create datasets with ONLY constant merchants
+print("Creating constant merchant datasets...")
 
-print("Period 2 - Merchant distribution by months present:")
-period2_presence.groupBy("months_present").count().orderBy("months_present").show(20)
+# 16-month constant merchant data (ONLY these merchants for ONLY these months)
+data_16m_constant = gbs_mids_joined \
+    .filter(col("txn_year_month").isin(period1_months)) \
+    .join(broadcast(constant_merchants_16m), on="merchant_key", how="inner")
+
+# 14-month constant merchant data (ONLY these merchants for ONLY these months)
+data_14m_constant = gbs_mids_joined \
+    .filter(col("txn_year_month").isin(period2_months)) \
+    .join(broadcast(constant_merchants_14m), on="merchant_key", how="inner")
+
+print(f"16-month constant dataset rows: {data_16m_constant.count():,}")
+print(f"14-month constant dataset rows: {data_14m_constant.count():,}")
+
+# COMMAND ----------
+# Verification: Check merchant counts by month (should be constant)
+print("\n=== VERIFICATION: Merchant counts by month ===")
+
+print("16-month sample - merchant count by month (should all be same):")
+verification_16m = data_16m_constant.groupBy("txn_year_month").agg(
+    countDistinct("merchant_key").alias("unique_merchants")
+).orderBy("txn_year_month")
+verification_16m.show()
+
+print("14-month sample - merchant count by month (should all be same):")
+verification_14m = data_14m_constant.groupBy("txn_year_month").agg(
+    countDistinct("merchant_key").alias("unique_merchants")
+).orderBy("txn_year_month")
+verification_14m.show()
+
+# COMMAND ----------
+# Formatting function
+def format_large_number(value):
+    """Format numbers with K/M/B/T notation"""
+    if pd.isna(value) or value is None:
+        return "0"
+    
+    try:
+        value = float(value)
+        if abs(value) >= 1e12:
+            return f"{value/1e12:,.1f}T"
+        elif abs(value) >= 1e9:
+            return f"{value/1e9:,.1f}B"
+        elif abs(value) >= 1e6:
+            return f"{value/1e6:,.1f}M"
+        elif abs(value) >= 1e3:
+            return f"{value/1e3:,.1f}K"
+        else:
+            return f"{value:,.0f}"
+    except:
+        return str(value)
+
+# COMMAND ----------
+# Analysis for 16-month constant merchants by NAICS3
+print("\n=== 16-MONTH CONSTANT MERCHANTS ANALYSIS (NAICS3) ===")
+
+stats_16m_naics3 = data_16m_constant.groupBy("naics3", "txn_year_month").agg(
+    countDistinct("merchant_key").alias("unique_merchants"),
+    spark_sum(col("adjusted_txn_cnt")).alias("total_transactions"),
+    spark_sum(col("total_tran_amount")).alias("total_amount")
+).orderBy("naics3", "txn_year_month")
+
+# Convert to pandas and format
+stats_16m_pd = stats_16m_naics3.toPandas()
+
+if len(stats_16m_pd) > 0:
+    stats_16m_pd["merchants_fmt"] = stats_16m_pd["unique_merchants"].apply(lambda x: f"{x:,}")
+    stats_16m_pd["transactions_fmt"] = stats_16m_pd["total_transactions"].apply(format_large_number)
+    stats_16m_pd["amount_fmt"] = stats_16m_pd["total_amount"].apply(format_large_number)
+    
+    print("\n16-Month Constant Merchants Analysis (NAICS3):")
+    print("=" * 90)
+    display_cols = ["naics3", "txn_year_month", "merchants_fmt", "transactions_fmt", "amount_fmt"]
+    print(stats_16m_pd[display_cols].to_string(index=False, max_colwidth=15))
+    
+    # Verify merchant count consistency within each NAICS3
+    print("\nVerification - Merchant count by NAICS3 (should be constant per NAICS):")
+    verification_naics = stats_16m_pd.groupby('naics3')['unique_merchants'].agg(['min', 'max', 'nunique'])
+    verification_naics['consistent'] = verification_naics['nunique'] == 1
+    print(verification_naics)
+
+# COMMAND ----------
+# Analysis for 14-month constant merchants by NAICS3
+print("\n=== 14-MONTH CONSTANT MERCHANTS ANALYSIS (NAICS3) ===")
+
+stats_14m_naics3 = data_14m_constant.groupBy("naics3", "txn_year_month").agg(
+    countDistinct("merchant_key").alias("unique_merchants"),
+    spark_sum(col("adjusted_txn_cnt")).alias("total_transactions"),
+    spark_sum(col("total_tran_amount")).alias("total_amount")
+).orderBy("naics3", "txn_year_month")
+
+# Convert to pandas and format
+stats_14m_pd = stats_14m_naics3.toPandas()
+
+if len(stats_14m_pd) > 0:
+    stats_14m_pd["merchants_fmt"] = stats_14m_pd["unique_merchants"].apply(lambda x: f"{x:,}")
+    stats_14m_pd["transactions_fmt"] = stats_14m_pd["total_transactions"].apply(format_large_number)
+    stats_14m_pd["amount_fmt"] = stats_14m_pd["total_amount"].apply(format_large_number)
+    
+    print("\n14-Month Constant Merchants Analysis (NAICS3):")
+    print("=" * 90)
+    display_cols = ["naics3", "txn_year_month", "merchants_fmt", "transactions_fmt", "amount_fmt"]
+    print(stats_14m_pd[display_cols].to_string(index=False, max_colwidth=15))
+    
+    # Verify merchant count consistency within each NAICS3
+    print("\nVerification - Merchant count by NAICS3 (should be constant per NAICS):")
+    verification_naics = stats_14m_pd.groupby('naics3')['unique_merchants'].agg(['min', 'max', 'nunique'])
+    verification_naics['consistent'] = verification_naics['nunique'] == 1
+    print(verification_naics)
+
+# COMMAND ----------
+# Check for NAICS6 analysis if available
+schema_fields = [field.name for field in gbs_mids_joined.schema.fields]
+if "naics6" in schema_fields:
+    print("\n=== NAICS6 ANALYSIS ===")
+    
+    # 16-month NAICS6 analysis
+    stats_16m_naics6 = data_16m_constant.groupBy("naics6", "txn_year_month").agg(
+        countDistinct("merchant_key").alias("unique_merchants"),
+        spark_sum(col("adjusted_txn_cnt")).alias("total_transactions"),
+        spark_sum(col("total_tran_amount")).alias("total_amount")
+    ).orderBy("naics6", "txn_year_month")
+    
+    stats_16m_naics6_pd = stats_16m_naics6.toPandas()
+    
+    if len(stats_16m_naics6_pd) > 0:
+        stats_16m_naics6_pd["merchants_fmt"] = stats_16m_naics6_pd["unique_merchants"].apply(lambda x: f"{x:,}")
+        stats_16m_naics6_pd["transactions_fmt"] = stats_16m_naics6_pd["total_transactions"].apply(format_large_number)
+        stats_16m_naics6_pd["amount_fmt"] = stats_16m_naics6_pd["total_amount"].apply(format_large_number)
+        
+        print("\n16-Month Constant Merchants Analysis (NAICS6):")
+        print("=" * 90)
+        display_cols = ["naics6", "txn_year_month", "merchants_fmt", "transactions_fmt", "amount_fmt"]
+        print(stats_16m_naics6_pd[display_cols].head(20).to_string(index=False, max_colwidth=15))
+    
+    # 14-month NAICS6 analysis
+    stats_14m_naics6 = data_14m_constant.groupBy("naics6", "txn_year_month").agg(
+        countDistinct("merchant_key").alias("unique_merchants"),
+        spark_sum(col("adjusted_txn_cnt")).alias("total_transactions"),
+        spark_sum(col("total_tran_amount")).alias("total_amount")
+    ).orderBy("naics6", "txn_year_month")
+    
+    stats_14m_naics6_pd = stats_14m_naics6.toPandas()
+    
+    if len(stats_14m_naics6_pd) > 0:
+        stats_14m_naics6_pd["merchants_fmt"] = stats_14m_naics6_pd["unique_merchants"].apply(lambda x: f"{x:,}")
+        stats_14m_naics6_pd["transactions_fmt"] = stats_14m_naics6_pd["total_transactions"].apply(format_large_number)
+        stats_14m_naics6_pd["amount_fmt"] = stats_14m_naics6_pd["total_amount"].apply(format_large_number)
+        
+        print("\n14-Month Constant Merchants Analysis (NAICS6):")
+        print("=" * 90)
+        display_cols = ["naics6", "txn_year_month", "merchants_fmt", "transactions_fmt", "amount_fmt"]
+        print(stats_14m_naics6_pd[display_cols].head(20).to_string(index=False, max_colwidth=15))
+
+else:
+    print("\nNAICS6 field not found - only NAICS3 analysis performed")
+
+# COMMAND ----------
+# Export results
+print("\n=== EXPORTING RESULTS ===")
+
+# Export constant merchant datasets
+data_16m_constant.toPandas().to_csv("/dbfs/FileStore/constant_merchants_16m_dataset.csv", index=False)
+data_14m_constant.toPandas().to_csv("/dbfs/FileStore/constant_merchants_14m_dataset.csv", index=False)
+
+# Export merchant lists
+constant_merchants_16m.toPandas().to_csv("/dbfs/FileStore/constant_merchants_16m_list.csv", index=False)
+constant_merchants_14m.toPandas().to_csv("/dbfs/FileStore/constant_merchants_14m_list.csv", index=False)
+
+# Export analysis results
+stats_16m_naics3.toPandas().to_csv("/dbfs/FileStore/constant_analysis_16m_naics3.csv", index=False)
+stats_14m_naics3.toPandas().to_csv("/dbfs/FileStore/constant_analysis_14m_naics3.csv", index=False)
+
+if len(stats_16m_pd) > 0:
+    stats_16m_pd.to_csv("/dbfs/FileStore/constant_analysis_16m_naics3_formatted.csv", index=False)
+if len(stats_14m_pd) > 0:
+    stats_14m_pd.to_csv("/dbfs/FileStore/constant_analysis_14m_naics3_formatted.csv", index=False)
+
+print("Files exported:")
+print("- constant_merchants_16m_dataset.csv (full transaction data for constant merchants)")
+print("- constant_merchants_14m_dataset.csv (full transaction data for constant merchants)")
+print("- constant_merchants_16m_list.csv (merchant key list)")
+print("- constant_merchants_14m_list.csv (merchant key list)")
+print("- constant_analysis_16m_naics3.csv / constant_analysis_16m_naics3_formatted.csv")
+print("- constant_analysis_14m_naics3.csv / constant_analysis_14m_naics3_formatted.csv")
+
+# COMMAND ----------
+# Final summary
+print("\n" + "="*80)
+print("TRUE CONSTANT MERCHANT ANALYSIS COMPLETED")
+print("="*80)
+
+print(f"16-month constant merchants: {constant_merchants_16m.count():,}")
+print(f"14-month constant merchants: {constant_merchants_14m.count():,}")
+print(f"16-month dataset transactions: {data_16m_constant.count():,}")
+print(f"14-month dataset transactions: {data_14m_constant.count():,}")
+
+if len(stats_16m_pd) > 0:
+    total_16m_amount = stats_16m_pd["total_amount"].sum()
+    total_16m_transactions = stats_16m_pd["total_transactions"].sum()
+    print(f"\n16-Month Cohort Totals:")
+    print(f"  Total transaction amount: {format_large_number(total_16m_amount)}")
+    print(f"  Total transactions: {format_large_number(total_16m_transactions)}")
+
+if len(stats_14m_pd) > 0:
+    total_14m_amount = stats_14m_pd["total_amount"].sum()
+    total_14m_transactions = stats_14m_pd["total_transactions"].sum()
+    print(f"\n14-Month Cohort Totals:")
+    print(f"  Total transaction amount: {format_large_number(total_14m_amount)}")
+    print(f"  Total transactions: {format_large_number(total_14m_transactions)}")
+
+print(f"\nNow each NAICS group will show CONSTANT merchant counts across all months!")
+print("This ensures true same-store sales analysis capability.")
