@@ -1,1 +1,49 @@
-# xx
+# COMMAND ----------
+from pyspark.sql.functions import col, countDistinct
+
+print("=== DEBUGGING FLAG LOGIC ===")
+
+# Check available months in your dataset
+available_months = gbs_mids_joined.select("txn_year_month").distinct().orderBy("txn_year_month").collect()
+available_months_list = [row.txn_year_month for row in available_months]
+print(f"Available months: {available_months_list}")
+
+# Our defined periods
+period1_months = [202012, 202101, 202102, 202103, 202104, 202105, 202106, 
+                  202107, 202108, 202109, 202110, 202111, 202112, 
+                  202201, 202202, 202203]  # 16 months
+
+period2_months = [202101, 202102, 202103, 202104, 202105, 202106, 
+                  202107, 202108, 202109, 202110, 202111, 202112, 
+                  202201, 202202]  # 14 months
+
+print(f"Period 1 (16-month): {period1_months}")
+print(f"Period 2 (14-month): {period2_months}")
+
+# Check which months are actually available
+period1_in_data = [m for m in period1_months if m in available_months_list]
+period2_in_data = [m for m in period2_months if m in available_months_list]
+
+print(f"Period 1 months in data: {period1_in_data}")
+print(f"Period 2 months in data: {period2_in_data}")
+print(f"Missing from Period 1: {set(period1_months) - set(period1_in_data)}")
+print(f"Missing from Period 2: {set(period2_months) - set(period2_in_data)}")
+
+# COMMAND ----------
+# Check merchant presence distributions
+period1_data = gbs_mids_joined.filter(col("txn_year_month").isin(period1_months))
+period2_data = gbs_mids_joined.filter(col("txn_year_month").isin(period2_months))
+
+period1_presence = period1_data.groupBy("merchant_key").agg(
+    countDistinct("txn_year_month").alias("months_present")
+)
+
+period2_presence = period2_data.groupBy("merchant_key").agg(
+    countDistinct("txn_year_month").alias("months_present")
+)
+
+print("Period 1 - Merchant distribution by months present:")
+period1_presence.groupBy("months_present").count().orderBy("months_present").show(20)
+
+print("Period 2 - Merchant distribution by months present:")
+period2_presence.groupBy("months_present").count().orderBy("months_present").show(20)
