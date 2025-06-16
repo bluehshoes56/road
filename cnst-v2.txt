@@ -1,1 +1,347 @@
-#z
+# COMMAND ----------
+# Enhanced Constant Merchant Analysis with Dashboard-Ready DataFrames
+# Creates structured outputs for dashboard visualization
+
+from pyspark.sql.functions import col, countDistinct, sum as spark_sum, avg, when, lit, broadcast
+import pandas as pd
+
+print("Enhanced Constant Merchant Analysis - Dashboard Ready Version")
+
+# COMMAND ----------
+# Define time periods
+period2_months = [202101, 202102, 202103, 202104, 202105, 202106,
+                  202107, 202108, 202109, 202110, 202111, 202112,
+                  202201, 202202]  # Jan 2021 - Feb 2022 (14 months)
+
+# Get quarterly tracking months
+available_months = gbs_mids_joined.select("txn_year_month").distinct().collect()
+available_months_list = sorted([row.txn_year_month for row in available_months])
+
+quarterly_months = []
+for year_month in available_months_list:
+    if int(year_month) > 202202:
+        year = int(year_month) // 100
+        month = int(year_month) % 100
+        if month in [3, 6, 9, 12]:
+            quarterly_months.append(year_month)
+
+tracking_months = [202202] + quarterly_months
+print(f"Tracking periods: {tracking_months}")
+
+# COMMAND ----------
+# Identify constant merchants
+period2_data = gbs_mids_joined.filter(col("txn_year_month").isin(period2_months))
+merchants_14m_counts = period2_data.groupBy("merchant_key").agg(
+    countDistinct("txn_year_month").alias("months_present")
+)
+
+constant_merchants_14m = merchants_14m_counts.filter(col("months_present") == 14).select("merchant_key")
+constant_14m_count = constant_merchants_14m.count()
+
+print(f"14-month constant merchants: {constant_14m_count:,}")
+
+# COMMAND ----------
+# Dashboard DataFrame 1: High-Level Metrics Summary
+print("\nCreating Dashboard DataFrame 1: High-Level Metrics Summary")
+
+high_level_metrics = []
+
+for month in tracking_months:
+    if month in available_months_list:
+        monthly_data = gbs_mids_joined \
+            .filter(col("txn_year_month") == month) \
+            .join(broadcast(constant_merchants_14m), on="merchant_key", how="inner")
+        
+        # Overall metrics for this month
+        overall_stats = monthly_data.agg(
+            countDistinct("merchant_key").alias("active_merchants"),
+            spark_sum(col("adjusted_txn_cnt")).alias("total_transactions"),
+            spark_sum(col("total_tran_amount")).alias("total_amount")
+        ).collect()[0]
+        
+        retention_rate = (overall_stats['active_merchants'] / constant_14m_count) * 100
+        avg_txn_amount = overall_stats['total_amount'] / overall_stats['total_transactions'] if overall_stats['total_transactions'] > 0 else 0
+        avg_merchant_amount = overall_stats['total_amount'] / overall_stats['active_merchants'] if overall_stats['active_merchants'] > 0 else 0
+        
+        high_level_metrics.append({
+            'period': month,
+            'active_merchants': overall_stats['active_merchants'],
+            'retention_rate_pct': round(retention_rate, 1),
+            'total_transactions': overall_stats['total_transactions'],
+            'total_amount': overall_stats['total_amount'],
+            'avg_transaction_amount': round(avg_txn_amount, 2),
+            'avg_merchant_amount': round(avg_merchant_amount, 2),
+            'base_cohort_size': constant_14m_count
+        })
+
+df_high_level = pd.DataFrame(high_level_metrics)
+print(f"High-Level Metrics DataFrame: {len(df_high_level)} periods")
+
+# COMMAND ----------
+# Dashboard DataFrame 2: NAICS3 Industry Breakdown
+print("\nCreating Dashboard DataFrame 2: NAICS3 Industry Breakdown")
+
+naics3_breakdown = []
+
+for month in tracking_months:
+    if month in available_months_list:
+        monthly_data = gbs_mids_joined \
+            .filter(col("txn_year_month") == month) \
+            .join(broadcast(constant_merchants_14m), on="merchant_key", how="inner")
+        
+        # NAICS3 breakdown for this month
+        naics3_stats = monthly_data.groupBy("naics3").agg(
+            countDistinct("merchant_key").alias("active_merchants"),
+            spark_sum(col("adjusted_txn_cnt")).alias("total_transactions"),
+            spark_sum(col("total_tran_amount")).alias("total_amount")
+        ).collect()
+        
+        for row in naics3_stats:
+            naics3_breakdown.append({
+                'period': month,
+                'naics3': row['naics3'],
+                'active_merchants': row['active_merchants'],
+                'total_transactions': row['total_transactions'],
+                'total_amount': row['total_amount'],
+                'avg_transaction_amount': round(row['total_amount'] / row['total_transactions'], 2) if row['total_transactions'] > 0 else 0,
+                'avg_merchant_amount': round(row['total_amount'] / row['active_merchants'], 2) if row['active_merchants'] > 0 else 0
+            })
+
+df_naics3_breakdown = pd.DataFrame(naics3_breakdown)
+print(f"NAICS3 Breakdown DataFrame: {len(df_naics3_breakdown)} records")
+
+# COMMAND ----------
+# Dashboard DataFrame 3: Retention Trends by Industry
+print("\nCreating Dashboard DataFrame 3: Retention Trends by Industry")
+
+# Get baseline merchant counts by NAICS3 from the 14-month period
+baseline_naics3 = gbs_mids_joined \
+    .filter(col("txn_year_month").isin(period2_months)) \
+    .join(broadcast(constant_merchants_14m), on="merchant_key", how="inner") \
+    .groupBy("naics3") \
+    .agg(countDistinct("merchant_key").alias("baseline_merchants")) \
+    .collect()
+
+baseline_dict = {row['naics3']: row['baseline_merchants'] for row in baseline_naics3}
+
+retention_trends = []
+
+for month in tracking_months:
+    if month in available_months_list:
+        monthly_data = gbs_mids_joined \
+            .filter(col("txn_year_month") == month) \
+            .join(broadcast(constant_merchants_14m), on="merchant_key", how="inner")
+        
+        naics3_retention = monthly_data.groupBy("naics3").agg(
+            countDistinct("merchant_key").alias("active_merchants")
+        ).collect()
+        
+        for row in naics3_retention:
+            naics3 = row['naics3']
+            active = row['active_merchants']
+            baseline = baseline_dict.get(naics3, 1)
+            retention_rate = (active / baseline) * 100
+            
+            retention_trends.append({
+                'period': month,
+                'naics3': naics3,
+                'baseline_merchants': baseline,
+                'active_merchants': active,
+                'retention_rate_pct': round(retention_rate, 1)
+            })
+
+df_retention_trends = pd.DataFrame(retention_trends)
+print(f"Retention Trends DataFrame: {len(df_retention_trends)} records")
+
+# COMMAND ----------
+# Dashboard DataFrame 4: Top Performing Industries
+print("\nCreating Dashboard DataFrame 4: Top Performing Industries")
+
+# Calculate overall performance metrics by NAICS3
+industry_performance = df_naics3_breakdown.groupby('naics3').agg({
+    'active_merchants': 'mean',
+    'total_transactions': 'sum',
+    'total_amount': 'sum',
+    'avg_transaction_amount': 'mean'
+}).reset_index()
+
+industry_performance['avg_merchants_per_period'] = industry_performance['active_merchants']
+industry_performance = industry_performance.sort_values('total_amount', ascending=False).head(20)
+
+df_top_industries = industry_performance.round(2)
+print(f"Top Industries DataFrame: {len(df_top_industries)} industries")
+
+# COMMAND ----------
+# Dashboard DataFrame 5: Monthly Growth Rates
+print("\nCreating Dashboard DataFrame 5: Monthly Growth Rates")
+
+df_high_level_sorted = df_high_level.sort_values('period')
+growth_rates = []
+
+for i in range(1, len(df_high_level_sorted)):
+    current = df_high_level_sorted.iloc[i]
+    previous = df_high_level_sorted.iloc[i-1]
+    
+    merchant_growth = ((current['active_merchants'] - previous['active_merchants']) / previous['active_merchants']) * 100 if previous['active_merchants'] > 0 else 0
+    transaction_growth = ((current['total_transactions'] - previous['total_transactions']) / previous['total_transactions']) * 100 if previous['total_transactions'] > 0 else 0
+    amount_growth = ((current['total_amount'] - previous['total_amount']) / previous['total_amount']) * 100 if previous['total_amount'] > 0 else 0
+    
+    growth_rates.append({
+        'period': current['period'],
+        'merchant_growth_pct': round(merchant_growth, 2),
+        'transaction_growth_pct': round(transaction_growth, 2),
+        'amount_growth_pct': round(amount_growth, 2),
+        'retention_change_pct': round(current['retention_rate_pct'] - previous['retention_rate_pct'], 2)
+    })
+
+df_growth_rates = pd.DataFrame(growth_rates)
+print(f"Growth Rates DataFrame: {len(df_growth_rates)} periods")
+
+# COMMAND ----------
+# Dashboard DataFrame 6: Quartile Analysis
+print("\nCreating Dashboard DataFrame 6: Quartile Analysis by Merchant Size")
+
+quartile_analysis = []
+
+for month in tracking_months:
+    if month in available_months_list:
+        monthly_data = gbs_mids_joined \
+            .filter(col("txn_year_month") == month) \
+            .join(broadcast(constant_merchants_14m), on="merchant_key", how="inner")
+        
+        # Get merchant-level data
+        merchant_stats = monthly_data.groupBy("merchant_key").agg(
+            spark_sum(col("adjusted_txn_cnt")).alias("merchant_transactions"),
+            spark_sum(col("total_tran_amount")).alias("merchant_amount")
+        ).toPandas()
+        
+        if len(merchant_stats) > 0:
+            # Calculate quartiles based on transaction amount
+            merchant_stats['amount_quartile'] = pd.qcut(merchant_stats['merchant_amount'], 
+                                                       q=4, labels=['Q1', 'Q2', 'Q3', 'Q4'])
+            
+            quartile_summary = merchant_stats.groupby('amount_quartile').agg({
+                'merchant_key': 'count',
+                'merchant_transactions': 'sum',
+                'merchant_amount': 'sum'
+            }).reset_index()
+            
+            for _, row in quartile_summary.iterrows():
+                quartile_analysis.append({
+                    'period': month,
+                    'quartile': row['amount_quartile'],
+                    'merchant_count': row['merchant_key'],
+                    'total_transactions': row['merchant_transactions'],
+                    'total_amount': row['merchant_amount'],
+                    'avg_amount_per_merchant': round(row['merchant_amount'] / row['merchant_key'], 2)
+                })
+
+df_quartile_analysis = pd.DataFrame(quartile_analysis)
+print(f"Quartile Analysis DataFrame: {len(df_quartile_analysis)} records")
+
+# COMMAND ----------
+# Export all dashboard DataFrames
+print("\nExporting Dashboard DataFrames")
+
+# Export using dbutils to accessible location
+dashboard_exports = [
+    (df_high_level, "dashboard_high_level_metrics.csv", "High-level summary metrics by period"),
+    (df_naics3_breakdown, "dashboard_naics3_breakdown.csv", "NAICS3 industry breakdown by period"),
+    (df_retention_trends, "dashboard_retention_trends.csv", "Retention rates by industry and period"),
+    (df_top_industries, "dashboard_top_industries.csv", "Top performing industries overall"),
+    (df_growth_rates, "dashboard_growth_rates.csv", "Period-over-period growth rates"),
+    (df_quartile_analysis, "dashboard_quartile_analysis.csv", "Merchant quartile analysis by period")
+]
+
+for df, filename, description in dashboard_exports:
+    if len(df) > 0:
+        df.to_csv(f"/tmp/{filename}", index=False)
+        dbutils.fs.cp(f"file:///tmp/{filename}", f"/FileStore/shared_uploads/{filename}")
+        print(f"✓ Exported: {filename} - {description}")
+
+# COMMAND ----------
+# Display sample data for verification
+print("\n" + "="*100)
+print("DASHBOARD DATAFRAMES SUMMARY")
+print("="*100)
+
+print(f"\n1. HIGH-LEVEL METRICS ({len(df_high_level)} periods):")
+print(df_high_level.head())
+
+print(f"\n2. NAICS3 BREAKDOWN (Top 10 records):")
+print(df_naics3_breakdown.head(10))
+
+print(f"\n3. RETENTION TRENDS (Sample):")
+print(df_retention_trends.head(10))
+
+print(f"\n4. TOP INDUSTRIES:")
+print(df_top_industries.head(10))
+
+print(f"\n5. GROWTH RATES:")
+print(df_growth_rates.head())
+
+print(f"\n6. QUARTILE ANALYSIS (Sample):")
+print(df_quartile_analysis.head(10))
+
+# COMMAND ----------
+# Create summary statistics DataFrame
+print("\nCreating Summary Statistics DataFrame")
+
+summary_stats = {
+    'metric': [
+        'Total Constant Merchants (14-month)',
+        'Tracking Periods',
+        'Industries Analyzed (NAICS3)',
+        'Latest Period Retention Rate (%)',
+        'Latest Period Active Merchants',
+        'Total Transaction Volume (Latest)',
+        'Total Amount (Latest Period)',
+        'Average Transaction Size (Latest)',
+        'Top Industry by Volume',
+        'Best Retention Industry'
+    ],
+    'value': []
+}
+
+# Calculate summary values
+latest_period_data = df_high_level.iloc[-1] if len(df_high_level) > 0 else {}
+top_industry = df_top_industries.iloc[0]['naics3'] if len(df_top_industries) > 0 else 'N/A'
+best_retention = df_retention_trends.loc[df_retention_trends['period'] == df_retention_trends['period'].max()].nlargest(1, 'retention_rate_pct') if len(df_retention_trends) > 0 else pd.DataFrame()
+
+summary_stats['value'] = [
+    f"{constant_14m_count:,}",
+    f"{len(tracking_months)}",
+    f"{df_naics3_breakdown['naics3'].nunique()}",
+    f"{latest_period_data.get('retention_rate_pct', 0):.1f}%",
+    f"{latest_period_data.get('active_merchants', 0):,.0f}",
+    f"{latest_period_data.get('total_transactions', 0):,.0f}",
+    f"${latest_period_data.get('total_amount', 0):,.0f}",
+    f"${latest_period_data.get('avg_transaction_amount', 0):,.2f}",
+    f"NAICS {top_industry}",
+    f"NAICS {best_retention.iloc[0]['naics3'] if len(best_retention) > 0 else 'N/A'}"
+]
+
+df_summary_stats = pd.DataFrame(summary_stats)
+
+# Export summary stats
+df_summary_stats.to_csv("/tmp/dashboard_summary_stats.csv", index=False)
+dbutils.fs.cp("file:///tmp/dashboard_summary_stats.csv", "/FileStore/shared_uploads/dashboard_summary_stats.csv")
+
+print("\n" + "="*100)
+print("DASHBOARD SUMMARY STATISTICS")
+print("="*100)
+print(df_summary_stats.to_string(index=False))
+
+print("\n" + "="*100)
+print("DASHBOARD DATAFRAMES EXPORT COMPLETED")
+print("="*100)
+print("Available dashboard files in /FileStore/shared_uploads/:")
+print("• dashboard_high_level_metrics.csv - Key metrics by period")
+print("• dashboard_naics3_breakdown.csv - Industry breakdown")  
+print("• dashboard_retention_trends.csv - Retention analysis")
+print("• dashboard_top_industries.csv - Top performers")
+print("• dashboard_growth_rates.csv - Growth trends")
+print("• dashboard_quartile_analysis.csv - Merchant size analysis")
+print("• dashboard_summary_stats.csv - Overall summary")
+print("\nReady for dashboard visualization and analysis")
+print("="*100)
