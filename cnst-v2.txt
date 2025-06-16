@@ -1,1 +1,136 @@
-#z
+# COMMAND ----------
+# Debug Units Analysis - Check if values are in different units (thousands, millions, etc.)
+
+from pyspark.sql.functions import col, countDistinct, sum as spark_sum, avg, min as spark_min, max as spark_max
+import pandas as pd
+
+print("=== UNITS ANALYSIS FOR TRANSACTION DATA ===")
+
+# COMMAND ----------
+# Check raw values without any formatting
+print("\n1. RAW VALUE ANALYSIS")
+
+# Get sample raw data for NAICS 238 in one month
+sample_raw = gbs_mids_joined.filter(
+    (col("naics3") == 238) & (col("txn_year_month") == 202101)
+).select(
+    "merchant_key", 
+    "adjusted_txn_cnt", 
+    "total_tran_amount"
+).limit(20)
+
+print("Raw sample data (no formatting):")
+sample_raw.show(truncate=False)
+
+# COMMAND ----------
+# Statistical analysis of raw values
+print("\n2. STATISTICAL ANALYSIS OF RAW VALUES")
+
+stats = gbs_mids_joined.filter(col("txn_year_month") == 202101).agg(
+    spark_min("adjusted_txn_cnt").alias("min_txn_cnt"),
+    spark_max("adjusted_txn_cnt").alias("max_txn_cnt"),
+    avg("adjusted_txn_cnt").alias("avg_txn_cnt"),
+    spark_min("total_tran_amount").alias("min_amount"),
+    spark_max("total_tran_amount").alias("max_amount"),
+    avg("total_tran_amount").alias("avg_amount")
+)
+
+print("Statistical summary for 202101:")
+stats.show(truncate=False)
+
+# COMMAND ----------
+# Test aggregation with raw values (no formatting)
+print("\n3. RAW AGGREGATION TEST")
+
+# Simple aggregation for NAICS 238 in one month - RAW VALUES
+raw_agg = gbs_mids_joined.filter(
+    (col("naics3") == 238) & (col("txn_year_month") == 202101)
+).agg(
+    countDistinct("merchant_key").alias("merchants"),
+    spark_sum("adjusted_txn_cnt").alias("total_txn_raw"),
+    spark_sum("total_tran_amount").alias("total_amount_raw")
+)
+
+print("Raw aggregation (NAICS 238, 202101):")
+raw_agg.show(truncate=False)
+
+# COMMAND ----------
+# Check if values are very small decimals
+print("\n4. DECIMAL ANALYSIS")
+
+# Check for very small decimal values
+decimal_check = gbs_mids_joined.filter(col("txn_year_month") == 202101).select(
+    "adjusted_txn_cnt",
+    "total_tran_amount"
+).limit(10)
+
+print("Raw decimal values:")
+for row in decimal_check.collect():
+    print(f"Txn Count: {row['adjusted_txn_cnt']} | Amount: {row['total_tran_amount']}")
+
+# COMMAND ----------
+# Test with different data types
+print("\n5. DATA TYPE CASTING TEST")
+
+# Cast to different types and see results
+type_test = gbs_mids_joined.filter(
+    (col("naics3") == 238) & (col("txn_year_month") == 202101)
+).agg(
+    spark_sum(col("adjusted_txn_cnt").cast("double")).alias("txn_as_double"),
+    spark_sum(col("adjusted_txn_cnt").cast("bigint")).alias("txn_as_bigint"),
+    spark_sum(col("total_tran_amount").cast("double")).alias("amount_as_double"),
+    spark_sum(col("total_tran_amount").cast("bigint")).alias("amount_as_bigint")
+)
+
+print("Type casting test:")
+type_test.show(truncate=False)
+
+# COMMAND ----------
+# Check what happens with our formatting functions
+print("\n6. FORMATTING FUNCTION TEST")
+
+def format_number_with_commas(value):
+    """Test version with debug output"""
+    if pd.isna(value) or value is None:
+        return "0"
+    try:
+        original_value = float(value)
+        rounded_value = round(original_value)
+        formatted_value = f"{int(rounded_value):,}"
+        print(f"  Debug: {original_value} -> {rounded_value} -> {formatted_value}")
+        return formatted_value
+    except:
+        return "0"
+
+# Test with actual aggregated values
+test_data = gbs_mids_joined.filter(
+    (col("naics3") == 238) & (col("txn_year_month") == 202101)
+).agg(
+    spark_sum("adjusted_txn_cnt").alias("total_txn"),
+    spark_sum("total_tran_amount").alias("total_amount")
+).collect()
+
+if test_data:
+    row = test_data[0]
+    print(f"Testing formatting functions:")
+    print(f"Raw txn count: {row['total_txn']}")
+    print(f"Raw amount: {row['total_amount']}")
+    
+    print(f"Formatted txn count:")
+    formatted_txn = format_number_with_commas(row['total_txn'])
+    print(f"Formatted amount:")
+    formatted_amount = format_number_with_commas(row['total_amount'])
+
+# COMMAND ----------
+# Check for scientific notation or very large/small numbers
+print("\n7. SCIENTIFIC NOTATION CHECK")
+
+sci_check = gbs_mids_joined.filter(col("txn_year_month") == 202101).select(
+    col("adjusted_txn_cnt").cast("string").alias("txn_str"),
+    col("total_tran_amount").cast("string").alias("amount_str")
+).limit(10)
+
+print("Values as strings (check for scientific notation):")
+sci_check.show(truncate=False)
+
+print("\n=== UNITS ANALYSIS COMPLETE ===")
