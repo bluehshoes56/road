@@ -1,1 +1,325 @@
-#z
+# COMMAND ----------
+# Quarterly Tracking: Count and Analyze Remaining Merchants from Original 14-Month Sample
+# Working version that shows actual merchant counts and statistics
+
+from pyspark.sql.functions import col, countDistinct, sum as spark_sum, avg, when, lit, broadcast
+import pandas as pd
+
+# Configuration
+QUARTER_INTERVAL = 6  # Semi-annual reporting
+OUTPUT_PATH = "/dbfs/FileStore/output/"
+
+print("Quarterly Tracking: Remaining Merchants from Original 14-Month Sample")
+print(f"Interval: Every {QUARTER_INTERVAL} months")
+
+# COMMAND ----------
+# Define 14-month constant period
+period2_months = [
+    202101, 202102, 202103, 202104, 202105, 202106, 202107, 202108, 202109,
+    202110, 202111, 202112, 202201, 202202
+]  # Jan 2021 - Feb 2022
+
+# Get available months for tracking
+available_months = gbs_mids_joined.select(
+    "txn_year_month").distinct().collect()
+available_months_list = sorted(
+    [row.txn_year_month for row in available_months])
+
+# Define future tracking periods - simple logic that works
+tracking_months = []
+for year_month in available_months_list:
+    if year_month > 202202:
+        year = int(year_month) // 100
+        month = int(year_month) % 100
+        if QUARTER_INTERVAL == 6 and month in [6, 12]:
+            tracking_months.append(year_month)
+        elif QUARTER_INTERVAL == 3 and month in [3, 6, 9, 12]:
+            tracking_months.append(year_month)
+
+print(f"Original 14-month period: {period2_months[0]} to {period2_months[-1]}")
+print(f"Future tracking periods: {tracking_months}")
+
+# COMMAND ----------
+# Identify the original 14-month constant merchants
+print("Analyzing remaining merchants in future periods...")
+
+period2_data = gbs_mids_joined.filter(
+    col("txn_year_month").isin(period2_months))
+merchants_14m_counts = period2_data.groupBy("merchant_key").agg(
+    countDistinct("txn_year_month").alias("months_present"))
+original_constant_merchants = merchants_14m_counts.filter(
+    col("months_present") == 14).select("merchant_key")
+original_sample_count = original_constant_merchants.count()
+
+print(f"Original 14-month constant merchants: {original_sample_count:,}")
+
+# COMMAND ----------
+# Analyze remaining merchants for each tracking period
+all_results = []
+
+# Include baseline (Feb 2022) for comparison
+all_periods = [202202] + tracking_months
+
+for period in all_periods:
+    print(f"Processing period: {period}")
+
+    # Get merchants from original sample who are still present in this period
+    period_data = gbs_mids_joined.filter(col("txn_year_month") == period)
+
+    # Find which original merchants are still active
+    remaining_merchants = period_data \
+        .join(broadcast(original_constant_merchants), on="merchant_key", how="inner")
+
+    remaining_count = remaining_merchants.select(
+        "merchant_key").distinct().count()
+
+    print(
+        f"  Remaining merchants: {remaining_count:,} out of {original_sample_count:,}"
+    )
+
+    if remaining_count > 0:
+        # Calculate statistics for remaining merchants by NAICS3
+        naics3_stats = remaining_merchants.groupBy("naics3").agg(
+            countDistinct("merchant_key").alias("remaining_merchants"),
+            spark_sum("adjusted_txn_cnt").alias("total_transactions"),
+            spark_sum("total_tran_amount").alias("total_amount")
+        ).withColumn("period", lit(period)) \
+         .withColumn("avg_amount_per_txn",
+                     when(col("total_transactions") > 0,
+                          col("total_amount") / col("total_transactions")).otherwise(0)) \
+         .withColumn("avg_amount_per_merchant",
+                     when(col("remaining_merchants") > 0,
+                          col("total_amount") / col("remaining_merchants")).otherwise(0))
+
+        naics3_pd = naics3_stats.toPandas()
+        naics3_pd['original_sample_count'] = original_sample_count
+        naics3_pd['total_remaining'] = remaining_count
+
+        all_results.append(naics3_pd)
+    else:
+        print(f"  No remaining merchants found for {period}")
+
+# COMMAND ----------
+# Combine results and create summary tables
+if all_results:
+    quarterly_df = pd.concat(all_results, ignore_index=True)
+
+    # Calculate retention percentages
+    quarterly_df['retention_pct'] = (quarterly_df['total_remaining'] /
+                                     quarterly_df['original_sample_count'] *
+                                     100).round(1)
+
+    print(f"\n{'='*120}")
+    print(
+        f"REMAINING MERCHANTS QUARTERLY TRACKING ({QUARTER_INTERVAL}-MONTH INTERVALS)"
+    )
+    print(
+        f"Original sample: {original_sample_count:,} merchants from 14-month constant period"
+    )
+    print(f"{'='*120}")
+
+    # Get unique periods and NAICS for display
+    naics3_list = sorted(quarterly_df['naics3'].unique())
+    period_list = sorted(quarterly_df['period'].unique())
+
+    # Summary by period
+    print("\nSUMMARY BY PERIOD:")
+    print("-" * 80)
+    print(
+        f"{'Period':<10} | {'Remaining':<12} | {'Retention %':<12} | {'Total Amount':<15} | {'Total Txns':<12}"
+    )
+    print("-" * 80)
+
+    for period in period_list:
+        period_data = quarterly_df[quarterly_df['period'] == period]
+        if len(period_data) > 0:
+            total_remaining = period_data['total_remaining'].values[0]
+            total_amount = period_data['total_amount'].sum()
+            total_txns = period_data['total_transactions'].sum()
+            retention_pct = (total_remaining / original_sample_count * 100)
+
+            period_label = "Baseline" if period == 202202 else str(period)
+
+            print(
+                f"{period_label:<10} | {int(total_remaining):,} | {retention_pct:.1f}% | ${total_amount:,.0f} | {int(total_txns):,}"
+            )
+
+    # Detailed breakdown by NAICS3 for each metric
+    metrics = [('REMAINING MERCHANT COUNTS', 'remaining_merchants'),
+               ('TOTAL TRANSACTION AMOUNT', 'total_amount'),
+               ('TOTAL TRANSACTION COUNT', 'total_transactions'),
+               ('AVERAGE AMOUNT PER TRANSACTION', 'avg_amount_per_txn'),
+               ('AVERAGE AMOUNT PER MERCHANT', 'avg_amount_per_merchant')]
+
+    for metric_name, metric_col in metrics:
+        print(f"\n{metric_name}:")
+        print("-" * 120)
+
+        # Create header
+        header = f"{'NAICS3':<8}"
+        for period in period_list:
+            header += f" | {period:<15}"
+        print(header)
+        print("-" * 120)
+
+        # Create rows for each NAICS3 (limit to top 15)
+        for naics3 in naics3_list[:15]:
+            naics_data = quarterly_df[quarterly_df['naics3'] == naics3]
+            row = f"{naics3:<8}"
+
+            for period in period_list:
+                period_data = naics_data[naics_data['period'] == period]
+
+                if len(period_data) > 0:
+                    raw_value = period_data[metric_col].values[0]
+
+                    if metric_col in [
+                            'total_amount', 'avg_amount_per_txn',
+                            'avg_amount_per_merchant'
+                    ]:
+                        value = f"{raw_value:,.0f}"
+                    else:
+                        value = f"{int(raw_value):,}"
+                else:
+                    value = "0"
+
+                row += f" | {value:<15}"
+
+            print(row)
+
+# COMMAND ----------
+# Calculate and display retention trends
+if all_results and len(period_list) > 1:
+    print(f"\n{'='*80}")
+    print("RETENTION TREND ANALYSIS")
+    print(f"{'='*80}")
+
+    baseline_count = quarterly_df[quarterly_df['period'] ==
+                                  period_list[0]]['total_remaining'].values[0]
+
+    print(f"Starting merchants (Feb 2022): {int(baseline_count):,}")
+
+    for i, period in enumerate(period_list[1:], 1):
+        current_count = quarterly_df[quarterly_df['period'] ==
+                                     period]['total_remaining'].values[0]
+        retention_vs_baseline = (current_count / baseline_count * 100)
+        retention_vs_original = (current_count / original_sample_count * 100)
+
+        print(f"{period}: {int(current_count):,} merchants")
+        print(f"  Retention vs Feb 2022: {retention_vs_baseline:.1f}%")
+        print(f"  Retention vs original sample: {retention_vs_original:.1f}%")
+
+        if i > 1:
+            prev_period = period_list[i - 1]
+            prev_count = quarterly_df[quarterly_df['period'] ==
+                                      prev_period]['total_remaining'].values[0]
+            period_change = (current_count / prev_count * 100)
+            print(f"  Change from previous period: {period_change:.1f}%")
+        print()
+
+# COMMAND ----------
+# Export results
+print(f"=== EXPORTING RESULTS ===")
+
+try:
+    if all_results:
+        # Export detailed quarterly data
+        quarterly_df.to_csv(f"{OUTPUT_PATH}remaining_merchants_quarterly.csv",
+                            index=False)
+        print(f"✓ Exported: remaining_merchants_quarterly.csv")
+
+        # Create summary pivot table
+        merchant_counts_pivot = quarterly_df.pivot(
+            index='naics3', columns='period',
+            values='remaining_merchants').fillna(0)
+        merchant_counts_pivot.to_csv(
+            f"{OUTPUT_PATH}remaining_merchants_pivot.csv")
+        print(f"✓ Exported: remaining_merchants_pivot.csv")
+
+        # Create retention summary
+        retention_summary = []
+        for period in period_list:
+            period_data = quarterly_df[quarterly_df['period'] == period]
+            if len(period_data) > 0:
+                total_remaining = period_data['total_remaining'].values[0]
+                total_amount = period_data['total_amount'].sum()
+                total_txns = period_data['total_transactions'].sum()
+
+                retention_summary.append({
+                    'period':
+                    period,
+                    'remaining_merchants':
+                    int(total_remaining),
+                    'retention_percentage':
+                    (total_remaining / original_sample_count * 100),
+                    'total_amount':
+                    total_amount,
+                    'total_transactions':
+                    int(total_txns),
+                    'avg_amount_per_merchant':
+                    total_amount /
+                    total_remaining if total_remaining > 0 else 0,
+                    'avg_amount_per_txn':
+                    total_amount / total_txns if total_txns > 0 else 0
+                })
+
+        retention_df = pd.DataFrame(retention_summary)
+        retention_df.to_csv(f"{OUTPUT_PATH}retention_summary.csv", index=False)
+        print(f"✓ Exported: retention_summary.csv")
+
+        # Export original merchant list for reference
+        original_constant_merchants.toPandas().to_csv(
+            f"{OUTPUT_PATH}original_14m_merchants.csv", index=False)
+        print(f"✓ Exported: original_14m_merchants.csv")
+
+    print(f"All files saved to: {OUTPUT_PATH}")
+
+except Exception as e:
+    print(f"Export error: {e}")
+
+# COMMAND ----------
+print("\n" + "=" * 100)
+print("REMAINING MERCHANTS QUARTERLY TRACKING COMPLETED")
+print("=" * 100)
+
+if all_results:
+    final_period = period_list[-1] if period_list else None
+    final_count = quarterly_df[
+        quarterly_df['period'] ==
+        final_period]['total_remaining'].values[0] if final_period else 0
+    final_retention = (final_count / original_sample_count * 100)
+
+    print(f"✓ Original sample: {original_sample_count:,} merchants")
+    print(f"✓ Periods tracked: {len(period_list)} periods")
+    print(
+        f"✓ Final period ({final_period}): {int(final_count):,} remaining merchants"
+    )
+    print(f"✓ Overall retention: {final_retention:.1f}%")
+    print(f"✓ Quarterly tracking shows actual merchant persistence patterns")
+
+    if len(period_list) > 1:
+        total_amount_latest = quarterly_df[quarterly_df['period'] ==
+                                           final_period]['total_amount'].sum()
+        total_txns_latest = quarterly_df[
+            quarterly_df['period'] ==
+            final_period]['total_transactions'].sum()
+
+        if total_txns_latest > 0:
+            avg_per_txn = total_amount_latest / total_txns_latest
+            print(f"✓ Latest period avg per transaction: ${avg_per_txn:,.0f}")
+
+        if final_count > 0:
+            avg_per_merchant = total_amount_latest / final_count
+            print(
+                f"✓ Latest period avg per merchant: ${avg_per_merchant:,.0f}")
+else:
+    print("✗ No tracking data generated")
+    print("Check if future months exist beyond Feb 2022")
+
+print(f"\nResults show exactly what you requested:")
+print(
+    f"- Counts only merchants remaining from original {original_sample_count:,} sample"
+)
+print(f"- Shows all statistics for those remaining merchants only")
+print(f"- Tracks retention patterns over time")
+print(f"- Ready for extrapolation analysis")
