@@ -1,0 +1,13 @@
+# CELL: Convert PySpark to Pandas for VAE Processing
+print("Converting PySpark DataFrame to Pandas...")
+original_data = original_data.toPandas()
+
+# Verify conversion
+print(f"✅ Conversion successful!")
+print(f"   Shape: {original_data.shape}")
+print(f"   Type: {type(original_data)}")
+print(f"   Memory usage: {original_data.memory_usage(deep=True).sum() / 1024**2:.1f} MB")
+
+# Display first few rows to verify data
+print("\n📊 First 5 rows:")
+display(original_data.head())
