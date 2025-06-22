@@ -1,1 +1,16 @@
 #z
+
+Replace lines 30-32 with:
+
+print("\nQuick comparison:")
+print(f"Original amount range: ${original_data['ed_amount'].min():.2f} - ${original_data['ed_amount'].max():.2f}")
+print(f"Synthetic amount range: ${synthetic_data['ed_amount'].min():.2f} - ${synthetic_data['ed_amount'].max():.2f}")
+The problem is in the f-string formatting. The current syntax has the closing brace } in the wrong position. The correct f-string format should have the formatting specification inside the braces with the expression.
+
+Current (incorrect):
+
+${original_data['ed_amount'].min()}:.2f}
+Should be:
+
+${original_data['ed_amount'].min():.2f}
+Make these changes to lines 30-32 and the error should be resolved.
