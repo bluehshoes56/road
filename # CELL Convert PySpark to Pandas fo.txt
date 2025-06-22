@@ -1,16 +1,41 @@
-#z
+# CELL 7: Generate Synthetic Data - Fixed
 
-Replace lines 30-32 with:
+import numpy as np
+import pandas as pd
 
+# Generate same amount as original data first
+num_synthetic = len(original_data)
+print(f"Generating {num_synthetic:,} synthetic samples...")
+
+# Generate synthetic data
+synthetic_processed = vae_model.generate(num_synthetic)
+
+# Denormalize the synthetic data using the same normalization that was applied in Cell 6
+# Get the min/max from the training data normalization
+train_min = (processed_data - processed_data.min()) / (processed_data.max() - processed_data.min() + 1e-8)
+synthetic_processed = synthetic_processed * (processed_data.max() - processed_data.min()) + processed_data.min()
+
+# Convert back to original format
+synthetic_data = processor.inverse_transform(synthetic_processed)
+
+# Apply business constraints
+synthetic_data['ed_amount'] = np.clip(synthetic_data['ed_amount'], 0.01, 1000000.0)
+synthetic_data['fh_file_creation_date'] = synthetic_data['fh_file_creation_date'].astype(int)
+synthetic_data['fh_file_creation_time'] = np.clip(synthetic_data['fh_file_creation_time'].astype(int), 0, 2359)
+
+print(f"\n✅ Synthetic data generated successfully!")
+print(f"Original data: {len(original_data):,} rows")
+print(f"Synthetic data: {len(synthetic_data):,} rows")
+
+# Preview synthetic data
+print("\nSynthetic data preview:")
+display(synthetic_data.head())
+
+# Quick comparison
 print("\nQuick comparison:")
 print(f"Original amount range: ${original_data['ed_amount'].min():.2f} - ${original_data['ed_amount'].max():.2f}")
 print(f"Synthetic amount range: ${synthetic_data['ed_amount'].min():.2f} - ${synthetic_data['ed_amount'].max():.2f}")
-The problem is in the f-string formatting. The current syntax has the closing brace } in the wrong position. The correct f-string format should have the formatting specification inside the braces with the expression.
+print(f"Original companies: {original_data['payer_Company_Name'].nunique()}")
+print(f"Synthetic companies: {synthetic_data['payer_Company_Name'].nunique()}")
 
-Current (incorrect):
-
-${original_data['ed_amount'].min()}:.2f}
-Should be:
-
-${original_data['ed_amount'].min():.2f}
-Make these changes to lines 30-32 and the error should be resolved.
+print("\n🎉 Ready for validation and evaluation!")
