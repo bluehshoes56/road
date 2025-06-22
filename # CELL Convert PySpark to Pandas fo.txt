@@ -39,3 +39,14 @@ print(f"Original companies: {original_data['payer_Company_Name'].nunique()}")
 print(f"Synthetic companies: {synthetic_data['payer_Company_Name'].nunique()}")
 
 print("\n🎉 Ready for validation and evaluation!")
+
+
+Alternatively, use this simpler approach for lines 34-35
+
+orig_min = original_data['ed_amount'].min()
+orig_max = original_data['ed_amount'].max()
+synth_min = synthetic_data['ed_amount'].min()
+synth_max = synthetic_data['ed_amount'].max()
+
+print(f"Original amount range: ${orig_min:.2f} - ${orig_max:.2f}")
+print(f"Synthetic amount range: ${synth_min:.2f} - ${synth_max:.2f}")
