@@ -1,9 +1,10 @@
-# CELL 7: Synthetic Data Generation - Diagnostic and Fix
+# CELL 7: Synthetic Data Generation - Final Fix
 
 import numpy as np
 import pandas as pd
 
-print("🔍 DIAGNOSTIC: Checking synthetic data generation...")
+print("🔍 SYNTHETIC DATA GENERATION - FINAL FIX")
+print("=" * 60)
 
 # Generate synthetic data
 num_synthetic = len(original_data)
@@ -12,115 +13,123 @@ print(f"Generating {num_synthetic:,} synthetic samples...")
 # Step 1: Generate latent samples and decode
 synthetic_processed = vae_model.generate(num_synthetic)
 print(f"✅ Generated synthetic features: {synthetic_processed.shape}")
-print(f"   Feature range: [{synthetic_processed.min():.3f}, {synthetic_processed.max():.3f}]")
 
-# Step 2: Check processor state
-print(f"\n🔍 PROCESSOR DIAGNOSTIC:")
-print(f"   Fitted: {processor.fitted}")
-print(f"   Feature dim: {processor.feature_dim}")
-print(f"   Categorical columns: {len(processor.config.CATEGORICAL_COLUMNS)}")
-print(f"   Label encoders: {len(processor.label_encoders)}")
-
-# Check each categorical column encoder
-for col in processor.config.CATEGORICAL_COLUMNS:
-    if col in processor.label_encoders:
-        encoder = processor.label_encoders[col]
-        print(f"   {col}: {len(encoder.classes_)} classes")
-    else:
-        print(f"   {col}: NO ENCODER FOUND")
-
-# Step 3: Manual reconstruction to diagnose issue
-print(f"\n🔧 MANUAL RECONSTRUCTION:")
+# Step 2: Check processor attributes
+print(f"\n🔍 PROCESSOR ATTRIBUTES:")
+processor_attrs = [attr for attr in dir(processor) if not attr.startswith('_')]
+print(f"Available attributes: {processor_attrs}")
 
 # Initialize result dataframe
 synthetic_data = pd.DataFrame()
 feature_idx = 0
 
-# Reconstruct categorical columns manually
-print("Reconstructing categorical columns...")
+# Step 3: Reconstruct categorical columns
+print(f"\n🔧 RECONSTRUCTING CATEGORICAL COLUMNS:")
 for col in processor.config.CATEGORICAL_COLUMNS:
-    if col in processor.label_encoders:
+    if hasattr(processor, 'label_encoders') and col in processor.label_encoders:
         encoder = processor.label_encoders[col]
         n_classes = len(encoder.classes_)
         
         print(f"  Processing {col} ({n_classes} classes)...")
         
-        # Extract one-hot features for this column
+        # Extract one-hot features
         one_hot_features = synthetic_processed[:, feature_idx:feature_idx + n_classes]
-        print(f"    One-hot shape: {one_hot_features.shape}")
-        print(f"    One-hot range: [{one_hot_features.min():.3f}, {one_hot_features.max():.3f}]")
         
         # Convert to categorical indices
         categorical_indices = np.argmax(one_hot_features, axis=1)
-        print(f"    Unique indices: {len(np.unique(categorical_indices))}")
-        print(f"    Index range: [{categorical_indices.min()}, {categorical_indices.max()}]")
-        
-        # Ensure indices are within valid range
         categorical_indices = np.clip(categorical_indices, 0, n_classes - 1)
         
         # Decode to original values
-        try:
-            decoded_values = encoder.inverse_transform(categorical_indices)
-            synthetic_data[col] = decoded_values
-            
-            unique_decoded = len(np.unique(decoded_values))
-            print(f"    ✅ Decoded to {unique_decoded} unique values")
-            
-            # Show sample values
-            sample_values = np.unique(decoded_values)[:5]
-            print(f"    Sample values: {sample_values}")
-            
-        except Exception as e:
-            print(f"    ❌ Decoding failed: {str(e)}")
-            # Fallback: use original data sample
-            synthetic_data[col] = np.random.choice(original_data[col].values, size=num_synthetic)
+        decoded_values = encoder.inverse_transform(categorical_indices)
+        synthetic_data[col] = decoded_values
+        
+        unique_count = len(np.unique(decoded_values))
+        print(f"    ✅ Decoded to {unique_count} unique values")
         
         feature_idx += n_classes
     else:
-        print(f"  ❌ No encoder for {col}")
-        # Fallback: use original data sample
+        print(f"  ⚠️ No encoder for {col}, using random sampling")
         synthetic_data[col] = np.random.choice(original_data[col].values, size=num_synthetic)
 
-# Reconstruct numerical columns
-print("Reconstructing numerical columns...")
+# Step 4: Reconstruct numerical columns
+print(f"\n🔧 RECONSTRUCTING NUMERICAL COLUMNS:")
 numerical_features = synthetic_processed[:, feature_idx:]
 print(f"  Numerical features shape: {numerical_features.shape}")
 
+# Check what numerical processing attributes exist
+numerical_attrs = []
+for attr in ['scalers', 'numerical_scaler', 'scaler', 'numerical_scalers']:
+    if hasattr(processor, attr):
+        numerical_attrs.append(attr)
+        print(f"  Found attribute: {attr}")
+
 for i, col in enumerate(processor.config.NUMERICAL_COLUMNS):
     if i < numerical_features.shape[1]:
-        if col in processor.scalers:
+        feature_col = numerical_features[:, i]
+        
+        # Try different scaler attributes
+        scaler_found = False
+        
+        # Option 1: Individual scalers
+        if hasattr(processor, 'scalers') and col in processor.scalers:
             scaler = processor.scalers[col]
-            # Reshape for scaler
-            feature_col = numerical_features[:, i].reshape(-1, 1)
-            decoded_values = scaler.inverse_transform(feature_col).flatten()
+            decoded_values = scaler.inverse_transform(feature_col.reshape(-1, 1)).flatten()
+            scaler_found = True
+        
+        # Option 2: Single numerical scaler
+        elif hasattr(processor, 'numerical_scaler') and processor.numerical_scaler is not None:
+            # For single scaler, use column index
+            if hasattr(processor.numerical_scaler, 'inverse_transform'):
+                if len(processor.config.NUMERICAL_COLUMNS) == 1:
+                    decoded_values = processor.numerical_scaler.inverse_transform(feature_col.reshape(-1, 1)).flatten()
+                else:
+                    # Multi-column scaler - need all columns
+                    if i == 0:  # Process all at once
+                        all_decoded = processor.numerical_scaler.inverse_transform(numerical_features)
+                        for j, num_col in enumerate(processor.config.NUMERICAL_COLUMNS):
+                            synthetic_data[num_col] = all_decoded[:, j]
+                        break
+                    else:
+                        continue  # Already processed
+                scaler_found = True
+        
+        # Option 3: Manual scaling using original data statistics
+        if not scaler_found:
+            print(f"    ⚠️ No scaler found for {col}, using manual scaling")
+            orig_min = original_data[col].min()
+            orig_max = original_data[col].max()
+            # Assume feature_col is in [0,1] range from VAE
+            decoded_values = feature_col * (orig_max - orig_min) + orig_min
+        
+        if not col in synthetic_data.columns:  # Only add if not already added
             synthetic_data[col] = decoded_values
-            
-            print(f"  ✅ {col}: range [{decoded_values.min():.2f}, {decoded_values.max():.2f}]")
-        else:
-            print(f"  ❌ No scaler for {col}")
-            synthetic_data[col] = original_data[col].sample(n=num_synthetic, replace=True).values
+            print(f"    ✅ {col}: range [{decoded_values.min():.2f}, {decoded_values.max():.2f}]")
 
-# Apply business constraints
-print("\n🔧 Applying business constraints...")
+# Step 5: Apply business constraints
+print(f"\n🔧 APPLYING BUSINESS CONSTRAINTS:")
 synthetic_data['ed_amount'] = np.clip(synthetic_data['ed_amount'], 0.01, 1000000.0)
 synthetic_data['fh_file_creation_date'] = synthetic_data['fh_file_creation_date'].astype(int)
 synthetic_data['fh_file_creation_time'] = np.clip(synthetic_data['fh_file_creation_time'].astype(int), 0, 2359)
 
-# Final validation
+# Step 6: Final validation
 print(f"\n✅ FINAL SYNTHETIC DATA:")
 print(f"   Shape: {synthetic_data.shape}")
 print(f"   Columns: {list(synthetic_data.columns)}")
 
 # Check categorical diversity
 print(f"\n📊 CATEGORICAL DIVERSITY CHECK:")
-for col in ['payer_Company_Name', 'payer_industry', 'payer_GICS']:
+for col in ['payer_Company_Name', 'payee_Company_Name', 'payer_industry', 'payer_GICS']:
     if col in synthetic_data.columns:
         unique_count = synthetic_data[col].nunique()
-        orig_unique = original_data[col].nunique()
-        print(f"   {col}: {unique_count} synthetic vs {orig_unique} original")
+        if col in original_data.columns:
+            orig_unique = original_data[col].nunique()
+            print(f"   {col}: {unique_count} synthetic vs {orig_unique} original")
+        else:
+            print(f"   {col}: {unique_count} synthetic values")
 
 # Display sample
 print(f"\n📋 Sample synthetic data:")
 display(synthetic_data.head())
 
-print(f"\n🎉 Synthetic data generation completed with manual reconstruction!")
+print(f"\n🎉 Synthetic data generation completed successfully!")
+print(f"Ready for validation in Cell 8 and comprehensive analysis in Cell 9.")
