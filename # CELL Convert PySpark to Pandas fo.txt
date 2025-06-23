@@ -1,9 +1,11 @@
-# Ensure we're using the real dataset
-print(f"Original data shape: {original_data.shape}")
-print(f"Processed data shape: {processed_data.shape if 'processed_data' in locals() else 'NOT FOUND'}")
+# DIAGNOSTIC: Check data sizes
+print(f"🔍 DATA SIZE DIAGNOSTIC:")
+print(f"original_data shape: {original_data.shape}")
+print(f"processed_data shape: {processed_data.shape}")
+print(f"VAE latent_dim: {vae_model.latent_dim}")
+print(f"VAE input_dim: {vae_model.input_dim}")
+print(f"num_synthetic requested: {len(original_data)}")
 
-# If processed_data doesn't match original_data size, reprocess
-if 'processed_data' not in locals() or len(processed_data) != len(original_data):
-    print("Re-processing original data for training...")
-    processed_data = processor.fit_transform(original_data)
-    print(f"New processed data shape: {processed_data.shape}")
+# Check what the VAE actually generates
+test_generation = vae_model.generate(10)  # Test with small sample
+print(f"VAE test generation shape: {test_generation.shape}")
