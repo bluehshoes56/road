@@ -1,4 +1,4 @@
-# CELL 10: Cross-Tabulation Analysis - Industry & GICS Level
+# CELL 10: Cross-Tabulation Analysis with Difference Percentages
 
 # Create copies to avoid modifying original data
 orig_data = original_data.copy()
@@ -11,8 +11,8 @@ orig_data['ed_amount'] = orig_data['ed_amount'].fillna(0)
 synth_data['ed_amount'] = pd.to_numeric(synth_data['ed_amount'], errors='coerce')
 synth_data['ed_amount'] = synth_data['ed_amount'].fillna(0)
 
-print("🏭 CROSS-TABULATION ANALYSIS")
-print("=" * 50)
+print("🏭 CROSS-TABULATION ANALYSIS WITH DIFFERENCE PERCENTAGES")
+print("=" * 60)
 
 # =============================================
 # INDUSTRY LEVEL CROSS-TABULATION ANALYSIS
@@ -94,6 +94,42 @@ synth_industry_avg_crosstab = pd.crosstab(
 print("\n📊 AVERAGE AMOUNT PER TRANSACTION CROSS-TABULATION (Synthetic):")
 display(synth_industry_avg_crosstab)
 
+# 3. DIFFERENCE PERCENTAGE TABLES - Industry Level
+print("\n📈 DIFFERENCE PERCENTAGE ANALYSIS - INDUSTRY LEVEL:")
+
+# Count difference percentage
+try:
+    orig_count_aligned, synth_count_aligned = orig_industry_count_crosstab.align(synth_industry_count_crosstab, fill_value=0)
+    count_diff_pct = ((synth_count_aligned - orig_count_aligned) / orig_count_aligned.replace(0, 1) * 100).round(1)
+    count_diff_pct = count_diff_pct.replace([float('inf'), -float('inf')], 0)
+    
+    print("\n📊 TRANSACTION COUNT DIFFERENCE % (Synthetic vs Original):")
+    display(count_diff_pct)
+except Exception as e:
+    print(f"⚠️ Could not calculate count difference: {e}")
+
+# Amount difference percentage
+try:
+    orig_amount_aligned, synth_amount_aligned = orig_industry_amount_crosstab.align(synth_industry_amount_crosstab, fill_value=0)
+    amount_diff_pct = ((synth_amount_aligned - orig_amount_aligned) / orig_amount_aligned.replace(0, 1) * 100).round(1)
+    amount_diff_pct = amount_diff_pct.replace([float('inf'), -float('inf')], 0)
+    
+    print("\n💰 TOTAL AMOUNT DIFFERENCE % (Synthetic vs Original):")
+    display(amount_diff_pct)
+except Exception as e:
+    print(f"⚠️ Could not calculate amount difference: {e}")
+
+# Average difference percentage
+try:
+    orig_avg_aligned, synth_avg_aligned = orig_industry_avg_crosstab.align(synth_industry_avg_crosstab, fill_value=0)
+    avg_diff_pct = ((synth_avg_aligned - orig_avg_aligned) / orig_avg_aligned.replace(0, 1) * 100).round(1)
+    avg_diff_pct = avg_diff_pct.replace([float('inf'), -float('inf')], 0)
+    
+    print("\n📊 AVERAGE AMOUNT DIFFERENCE % (Synthetic vs Original):")
+    display(avg_diff_pct)
+except Exception as e:
+    print(f"⚠️ Could not calculate average difference: {e}")
+
 # =============================================
 # GICS LEVEL CROSS-TABULATION ANALYSIS  
 # =============================================
@@ -125,8 +161,93 @@ orig_gics_amount_crosstab = pd.crosstab(
 print("\n💰 TOTAL AMOUNT CROSS-TABULATION (Original):")
 display(orig_gics_amount_crosstab)
 
-print("\n✅ CROSS-TABULATION ANALYSIS COMPLETED")
-print("📊 Cross-tabulations generated:")
-print("   ✓ Industry Level: Count, Amount, Avg Amount per Transaction")
-print("   ✓ GICS Level: Count, Amount, Avg Amount per Transaction")
-print("   ✓ Both Original and Synthetic data tables")
+# Average amount per transaction cross-tabulation
+orig_gics_avg_crosstab = pd.crosstab(
+    orig_data['payer_GICS'],
+    orig_data['payee_GICS'],
+    values=orig_data['ed_amount'],
+    aggfunc='mean',
+    margins=True,
+    margins_name='Total'
+).round(0)
+print("\n📊 AVERAGE AMOUNT PER TRANSACTION CROSS-TABULATION (Original):")
+display(orig_gics_avg_crosstab)
+
+# 2. SYNTHETIC DATA - GICS Cross-tabulation
+print("\n🤖 SYNTHETIC DATA - PAYER vs PAYEE GICS:")
+
+# Count cross-tabulation
+synth_gics_count_crosstab = pd.crosstab(
+    synth_data['payer_GICS'],
+    synth_data['payee_GICS'],
+    margins=True,
+    margins_name='Total'
+)
+print("\n📊 TRANSACTION COUNT CROSS-TABULATION (Synthetic):")
+display(synth_gics_count_crosstab)
+
+# Amount cross-tabulation
+synth_gics_amount_crosstab = pd.crosstab(
+    synth_data['payer_GICS'],
+    synth_data['payee_GICS'],
+    values=synth_data['ed_amount'],
+    aggfunc='sum',
+    margins=True,
+    margins_name='Total'
+).round(0)
+print("\n💰 TOTAL AMOUNT CROSS-TABULATION (Synthetic):")
+display(synth_gics_amount_crosstab)
+
+# Average amount per transaction cross-tabulation
+synth_gics_avg_crosstab = pd.crosstab(
+    synth_data['payer_GICS'],
+    synth_data['payee_GICS'],
+    values=synth_data['ed_amount'],
+    aggfunc='mean',
+    margins=True,
+    margins_name='Total'
+).round(0)
+print("\n📊 AVERAGE AMOUNT PER TRANSACTION CROSS-TABULATION (Synthetic):")
+display(synth_gics_avg_crosstab)
+
+# 3. DIFFERENCE PERCENTAGE TABLES - GICS Level
+print("\n📈 DIFFERENCE PERCENTAGE ANALYSIS - GICS LEVEL:")
+
+# Count difference percentage
+try:
+    orig_gics_count_aligned, synth_gics_count_aligned = orig_gics_count_crosstab.align(synth_gics_count_crosstab, fill_value=0)
+    gics_count_diff_pct = ((synth_gics_count_aligned - orig_gics_count_aligned) / orig_gics_count_aligned.replace(0, 1) * 100).round(1)
+    gics_count_diff_pct = gics_count_diff_pct.replace([float('inf'), -float('inf')], 0)
+    
+    print("\n📊 TRANSACTION COUNT DIFFERENCE % (Synthetic vs Original):")
+    display(gics_count_diff_pct)
+except Exception as e:
+    print(f"⚠️ Could not calculate GICS count difference: {e}")
+
+# Amount difference percentage
+try:
+    orig_gics_amount_aligned, synth_gics_amount_aligned = orig_gics_amount_crosstab.align(synth_gics_amount_crosstab, fill_value=0)
+    gics_amount_diff_pct = ((synth_gics_amount_aligned - orig_gics_amount_aligned) / orig_gics_amount_aligned.replace(0, 1) * 100).round(1)
+    gics_amount_diff_pct = gics_amount_diff_pct.replace([float('inf'), -float('inf')], 0)
+    
+    print("\n💰 TOTAL AMOUNT DIFFERENCE % (Synthetic vs Original):")
+    display(gics_amount_diff_pct)
+except Exception as e:
+    print(f"⚠️ Could not calculate GICS amount difference: {e}")
+
+# Average difference percentage
+try:
+    orig_gics_avg_aligned, synth_gics_avg_aligned = orig_gics_avg_crosstab.align(synth_gics_avg_crosstab, fill_value=0)
+    gics_avg_diff_pct = ((synth_gics_avg_aligned - orig_gics_avg_aligned) / orig_gics_avg_aligned.replace(0, 1) * 100).round(1)
+    gics_avg_diff_pct = gics_avg_diff_pct.replace([float('inf'), -float('inf')], 0)
+    
+    print("\n📊 AVERAGE AMOUNT DIFFERENCE % (Synthetic vs Original):")
+    display(gics_avg_diff_pct)
+except Exception as e:
+    print(f"⚠️ Could not calculate GICS average difference: {e}")
+
+print("\n✅ CROSS-TABULATION ANALYSIS WITH DIFFERENCES COMPLETED")
+print("📊 Generated analysis includes:")
+print("   ✓ Industry Level: Count, Amount, Avg Amount (Original & Synthetic)")
+print("   ✓ GICS Level: Count, Amount, Avg Amount (Original & Synthetic)")
+print("   ✓ Difference Percentage tables for all metrics")
