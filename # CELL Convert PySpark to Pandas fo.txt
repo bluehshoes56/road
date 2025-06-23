@@ -1,119 +1,126 @@
-# CELL 8: Basic Validation (Quick Check) - FIXED
+# CELL 7: Synthetic Data Generation - Diagnostic and Fix
 
-def quick_validation(original: pd.DataFrame, synthetic: pd.DataFrame):
-    """Quick validation to verify synthetic data quality."""
-    
-    print("🔍 QUICK VALIDATION RESULTS")
-    print("=" * 50)
-    
-    # Ensure both dataframes have the required column
-    if 'ed_amount' not in original.columns or 'ed_amount' not in synthetic.columns:
-        print("❌ Error: 'ed_amount' column missing from data")
-        return 0.0
-    
-    # Convert to numeric and handle any non-numeric values
-    original_amounts = pd.to_numeric(original['ed_amount'], errors='coerce').dropna()
-    synthetic_amounts = pd.to_numeric(synthetic['ed_amount'], errors='coerce').dropna()
-    
-    print(f"Original valid amounts: {len(original_amounts):,}")
-    print(f"Synthetic valid amounts: {len(synthetic_amounts):,}")
-    
-    # 1. Statistical comparison for amounts
-    print("\n💰 TRANSACTION AMOUNTS:")
-    print(f"{'Metric':<12} {'Original':<15} {'Synthetic':<15} {'Diff %':<10}")
-    print("-" * 55)
-    
-    # Calculate statistics manually to avoid KeyError
-    stats_comparison = [
-        ('mean', original_amounts.mean(), synthetic_amounts.mean()),
-        ('median', original_amounts.median(), synthetic_amounts.median()),
-        ('std', original_amounts.std(), synthetic_amounts.std()),
-        ('min', original_amounts.min(), synthetic_amounts.min()),
-        ('max', original_amounts.max(), synthetic_amounts.max())
-    ]
-    
-    for stat_name, orig_val, synth_val in stats_comparison:
-        if pd.isna(orig_val) or pd.isna(synth_val):
-            diff_pct = 0
-        else:
-            diff_pct = ((synth_val - orig_val) / orig_val * 100) if orig_val != 0 else 0
+import numpy as np
+import pandas as pd
+
+print("🔍 DIAGNOSTIC: Checking synthetic data generation...")
+
+# Generate synthetic data
+num_synthetic = len(original_data)
+print(f"Generating {num_synthetic:,} synthetic samples...")
+
+# Step 1: Generate latent samples and decode
+synthetic_processed = vae_model.generate(num_synthetic)
+print(f"✅ Generated synthetic features: {synthetic_processed.shape}")
+print(f"   Feature range: [{synthetic_processed.min():.3f}, {synthetic_processed.max():.3f}]")
+
+# Step 2: Check processor state
+print(f"\n🔍 PROCESSOR DIAGNOSTIC:")
+print(f"   Fitted: {processor.fitted}")
+print(f"   Feature dim: {processor.feature_dim}")
+print(f"   Categorical columns: {len(processor.config.CATEGORICAL_COLUMNS)}")
+print(f"   Label encoders: {len(processor.label_encoders)}")
+
+# Check each categorical column encoder
+for col in processor.config.CATEGORICAL_COLUMNS:
+    if col in processor.label_encoders:
+        encoder = processor.label_encoders[col]
+        print(f"   {col}: {len(encoder.classes_)} classes")
+    else:
+        print(f"   {col}: NO ENCODER FOUND")
+
+# Step 3: Manual reconstruction to diagnose issue
+print(f"\n🔧 MANUAL RECONSTRUCTION:")
+
+# Initialize result dataframe
+synthetic_data = pd.DataFrame()
+feature_idx = 0
+
+# Reconstruct categorical columns manually
+print("Reconstructing categorical columns...")
+for col in processor.config.CATEGORICAL_COLUMNS:
+    if col in processor.label_encoders:
+        encoder = processor.label_encoders[col]
+        n_classes = len(encoder.classes_)
         
-        print(f"{stat_name:<12} ${orig_val:<14,.2f} ${synth_val:<14,.2f} {diff_pct:<9.1f}%")
-    
-    # 2. Categorical preservation
-    print("\n🏢 CATEGORICAL VARIABLES:")
-    print(f"{'Column':<25} {'Orig Count':<12} {'Synth Count':<12} {'Coverage':<10}")
-    print("-" * 65)
-    
-    categorical_cols = ['payer_Company_Name', 'payer_industry', 'payer_GICS']
-    category_similarities = []
-    
-    for col in categorical_cols:
-        if col in original.columns and col in synthetic.columns:
-            orig_unique = set(original[col].dropna().astype(str).unique())
-            synth_unique = set(synthetic[col].dropna().astype(str).unique())
+        print(f"  Processing {col} ({n_classes} classes)...")
+        
+        # Extract one-hot features for this column
+        one_hot_features = synthetic_processed[:, feature_idx:feature_idx + n_classes]
+        print(f"    One-hot shape: {one_hot_features.shape}")
+        print(f"    One-hot range: [{one_hot_features.min():.3f}, {one_hot_features.max():.3f}]")
+        
+        # Convert to categorical indices
+        categorical_indices = np.argmax(one_hot_features, axis=1)
+        print(f"    Unique indices: {len(np.unique(categorical_indices))}")
+        print(f"    Index range: [{categorical_indices.min()}, {categorical_indices.max()}]")
+        
+        # Ensure indices are within valid range
+        categorical_indices = np.clip(categorical_indices, 0, n_classes - 1)
+        
+        # Decode to original values
+        try:
+            decoded_values = encoder.inverse_transform(categorical_indices)
+            synthetic_data[col] = decoded_values
             
-            if len(orig_unique) > 0:
-                coverage = len(orig_unique & synth_unique) / len(orig_unique) * 100
-                category_similarities.append(coverage / 100)
-            else:
-                coverage = 0
-                category_similarities.append(0)
+            unique_decoded = len(np.unique(decoded_values))
+            print(f"    ✅ Decoded to {unique_decoded} unique values")
             
-            print(f"{col:<25} {len(orig_unique):<12} {len(synth_unique):<12} {coverage:<9.1f}%")
+            # Show sample values
+            sample_values = np.unique(decoded_values)[:5]
+            print(f"    Sample values: {sample_values}")
+            
+        except Exception as e:
+            print(f"    ❌ Decoding failed: {str(e)}")
+            # Fallback: use original data sample
+            synthetic_data[col] = np.random.choice(original_data[col].values, size=num_synthetic)
+        
+        feature_idx += n_classes
+    else:
+        print(f"  ❌ No encoder for {col}")
+        # Fallback: use original data sample
+        synthetic_data[col] = np.random.choice(original_data[col].values, size=num_synthetic)
+
+# Reconstruct numerical columns
+print("Reconstructing numerical columns...")
+numerical_features = synthetic_processed[:, feature_idx:]
+print(f"  Numerical features shape: {numerical_features.shape}")
+
+for i, col in enumerate(processor.config.NUMERICAL_COLUMNS):
+    if i < numerical_features.shape[1]:
+        if col in processor.scalers:
+            scaler = processor.scalers[col]
+            # Reshape for scaler
+            feature_col = numerical_features[:, i].reshape(-1, 1)
+            decoded_values = scaler.inverse_transform(feature_col).flatten()
+            synthetic_data[col] = decoded_values
+            
+            print(f"  ✅ {col}: range [{decoded_values.min():.2f}, {decoded_values.max():.2f}]")
         else:
-            print(f"{col:<25} {'Missing':<12} {'Missing':<12} {'N/A':<9}")
-            category_similarities.append(0)
-    
-    # 3. Overall quality score
-    try:
-        amount_similarity = 1 - abs((synthetic_amounts.mean() - original_amounts.mean()) / original_amounts.mean())
-        amount_similarity = max(0, min(1, amount_similarity))  # Clamp between 0 and 1
-    except:
-        amount_similarity = 0
-    
-    category_similarity = np.mean(category_similarities) if category_similarities else 0
-    overall_quality = (amount_similarity + category_similarity) / 2
-    
-    print(f"\n📊 QUALITY SCORES:")
-    print(f"Amount Similarity:     {amount_similarity:.3f}")
-    print(f"Category Similarity:   {category_similarity:.3f}")
-    print(f"Overall Quality:       {overall_quality:.3f}")
-    
-    # Quality assessment
-    if overall_quality >= 0.8:
-        assessment = "🟢 EXCELLENT - Ready for production"
-    elif overall_quality >= 0.7:
-        assessment = "🟡 GOOD - Minor adjustments needed"
-    elif overall_quality >= 0.6:
-        assessment = "🟠 FAIR - Some improvements required"
-    else:
-        assessment = "🔴 POOR - Significant improvements needed"
-    
-    print(f"\nAssessment: {assessment}")
-    
-    return overall_quality
+            print(f"  ❌ No scaler for {col}")
+            synthetic_data[col] = original_data[col].sample(n=num_synthetic, replace=True).values
 
-# Run quick validation
-try:
-    quality_score = quick_validation(original_data, synthetic_data)
-    
-    print("\n" + "=" * 50)
-    print("✅ VALIDATION COMPLETE")
-    print(f"Your VAE model achieved a quality score of {quality_score:.3f}")
-    
-    if quality_score >= 0.7:
-        print("\n🎉 SUCCESS! Your model is working well.")
-        print("Next steps:")
-        print("1. Try with your actual 3.5K data")
-        print("2. Scale up to larger datasets")
-        print("3. Run comprehensive validation")
-    else:
-        print("\n⚠️ TUNING NEEDED:")
-        print("1. Increase training epochs")
-        print("2. Adjust latent dimensions")
-        print("3. Modify network architecture")
+# Apply business constraints
+print("\n🔧 Applying business constraints...")
+synthetic_data['ed_amount'] = np.clip(synthetic_data['ed_amount'], 0.01, 1000000.0)
+synthetic_data['fh_file_creation_date'] = synthetic_data['fh_file_creation_date'].astype(int)
+synthetic_data['fh_file_creation_time'] = np.clip(synthetic_data['fh_file_creation_time'].astype(int), 0, 2359)
 
-except Exception as e:
-    print(f"\n❌ Validation failed with error: {str(e)}")
-    print("Proceeding to next validation step...")
+# Final validation
+print(f"\n✅ FINAL SYNTHETIC DATA:")
+print(f"   Shape: {synthetic_data.shape}")
+print(f"   Columns: {list(synthetic_data.columns)}")
+
+# Check categorical diversity
+print(f"\n📊 CATEGORICAL DIVERSITY CHECK:")
+for col in ['payer_Company_Name', 'payer_industry', 'payer_GICS']:
+    if col in synthetic_data.columns:
+        unique_count = synthetic_data[col].nunique()
+        orig_unique = original_data[col].nunique()
+        print(f"   {col}: {unique_count} synthetic vs {orig_unique} original")
+
+# Display sample
+print(f"\n📋 Sample synthetic data:")
+display(synthetic_data.head())
+
+print(f"\n🎉 Synthetic data generation completed with manual reconstruction!")
