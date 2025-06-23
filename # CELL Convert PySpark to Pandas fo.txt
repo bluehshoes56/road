@@ -1,8 +1,32 @@
-# Display first 10 transactions from original data
-print("📋 ORIGINAL DATA SAMPLE - First 10 Transactions")
+# Display 10 transactions with diverse payer companies (3+2+4+1 pattern)
+print("📋 ORIGINAL DATA SAMPLE - 10 Transactions with Diverse Payers")
 print("=" * 60)
 
-sample_data = original_data.head(10)[['payer_Company_Name', 'payee_Company_Name', 'ed_amount', 'fh_file_creation_date', 'fh_file_creation_time']]
+# Get unique payer companies
+unique_payers = original_data['payer_Company_Name'].unique()
+print(f"Total unique payers in dataset: {len(unique_payers)}")
+
+# Sample according to your pattern: 3+2+4+1 = 10 rows
+sample_rows = []
+
+# First 3 rows - Payer 1
+payer1_data = original_data[original_data['payer_Company_Name'] == unique_payers[0]].head(3)
+sample_rows.append(payer1_data)
+
+# Next 2 rows - Payer 2  
+payer2_data = original_data[original_data['payer_Company_Name'] == unique_payers[1]].head(2)
+sample_rows.append(payer2_data)
+
+# Next 4 rows - Payer 3
+payer3_data = original_data[original_data['payer_Company_Name'] == unique_payers[2]].head(4)
+sample_rows.append(payer3_data)
+
+# Final 1 row - Payer 4
+payer4_data = original_data[original_data['payer_Company_Name'] == unique_payers[3]].head(1)
+sample_rows.append(payer4_data)
+
+# Combine all sample rows
+sample_data = pd.concat(sample_rows)[['payer_Company_Name', 'payee_Company_Name', 'ed_amount', 'fh_file_creation_date', 'fh_file_creation_time']]
 
 # Format for better display
 sample_formatted = sample_data.copy()
@@ -13,8 +37,17 @@ sample_formatted['fh_file_creation_time'] = sample_formatted['fh_file_creation_t
 # Rename columns for clarity
 sample_formatted.columns = ['Payer_Company', 'Payee_Company', 'Transaction_Amount', 'Transaction_Date', 'Transaction_Time']
 
+# Add row numbers to show the pattern
+sample_formatted.reset_index(drop=True, inplace=True)
+sample_formatted.index = sample_formatted.index + 1
+
 display(sample_formatted)
 
+print(f"\nPattern achieved: ")
+print(f"Rows 1-3: {unique_payers[0]}")
+print(f"Rows 4-5: {unique_payers[1]}")  
+print(f"Rows 6-9: {unique_payers[2]}")
+print(f"Row 10: {unique_payers[3]}")
 print(f"\nOriginal dataset contains {len(original_data):,} total transactions")
 
 
