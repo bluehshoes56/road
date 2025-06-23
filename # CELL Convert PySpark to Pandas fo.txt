@@ -55,6 +55,7 @@ print(f"\nOriginal dataset contains {len(original_data):,} total transactions")
 =====================
 
 
+
 # CELL 7: Generate Synthetic Data - Fixed Numerical Reconstruction
 
 import numpy as np
