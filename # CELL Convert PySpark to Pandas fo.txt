@@ -1,1 +1,119 @@
-#z
+# CELL 8: Basic Validation (Quick Check) - FIXED
+
+def quick_validation(original: pd.DataFrame, synthetic: pd.DataFrame):
+    """Quick validation to verify synthetic data quality."""
+    
+    print("🔍 QUICK VALIDATION RESULTS")
+    print("=" * 50)
+    
+    # Ensure both dataframes have the required column
+    if 'ed_amount' not in original.columns or 'ed_amount' not in synthetic.columns:
+        print("❌ Error: 'ed_amount' column missing from data")
+        return 0.0
+    
+    # Convert to numeric and handle any non-numeric values
+    original_amounts = pd.to_numeric(original['ed_amount'], errors='coerce').dropna()
+    synthetic_amounts = pd.to_numeric(synthetic['ed_amount'], errors='coerce').dropna()
+    
+    print(f"Original valid amounts: {len(original_amounts):,}")
+    print(f"Synthetic valid amounts: {len(synthetic_amounts):,}")
+    
+    # 1. Statistical comparison for amounts
+    print("\n💰 TRANSACTION AMOUNTS:")
+    print(f"{'Metric':<12} {'Original':<15} {'Synthetic':<15} {'Diff %':<10}")
+    print("-" * 55)
+    
+    # Calculate statistics manually to avoid KeyError
+    stats_comparison = [
+        ('mean', original_amounts.mean(), synthetic_amounts.mean()),
+        ('median', original_amounts.median(), synthetic_amounts.median()),
+        ('std', original_amounts.std(), synthetic_amounts.std()),
+        ('min', original_amounts.min(), synthetic_amounts.min()),
+        ('max', original_amounts.max(), synthetic_amounts.max())
+    ]
+    
+    for stat_name, orig_val, synth_val in stats_comparison:
+        if pd.isna(orig_val) or pd.isna(synth_val):
+            diff_pct = 0
+        else:
+            diff_pct = ((synth_val - orig_val) / orig_val * 100) if orig_val != 0 else 0
+        
+        print(f"{stat_name:<12} ${orig_val:<14,.2f} ${synth_val:<14,.2f} {diff_pct:<9.1f}%")
+    
+    # 2. Categorical preservation
+    print("\n🏢 CATEGORICAL VARIABLES:")
+    print(f"{'Column':<25} {'Orig Count':<12} {'Synth Count':<12} {'Coverage':<10}")
+    print("-" * 65)
+    
+    categorical_cols = ['payer_Company_Name', 'payer_industry', 'payer_GICS']
+    category_similarities = []
+    
+    for col in categorical_cols:
+        if col in original.columns and col in synthetic.columns:
+            orig_unique = set(original[col].dropna().astype(str).unique())
+            synth_unique = set(synthetic[col].dropna().astype(str).unique())
+            
+            if len(orig_unique) > 0:
+                coverage = len(orig_unique & synth_unique) / len(orig_unique) * 100
+                category_similarities.append(coverage / 100)
+            else:
+                coverage = 0
+                category_similarities.append(0)
+            
+            print(f"{col:<25} {len(orig_unique):<12} {len(synth_unique):<12} {coverage:<9.1f}%")
+        else:
+            print(f"{col:<25} {'Missing':<12} {'Missing':<12} {'N/A':<9}")
+            category_similarities.append(0)
+    
+    # 3. Overall quality score
+    try:
+        amount_similarity = 1 - abs((synthetic_amounts.mean() - original_amounts.mean()) / original_amounts.mean())
+        amount_similarity = max(0, min(1, amount_similarity))  # Clamp between 0 and 1
+    except:
+        amount_similarity = 0
+    
+    category_similarity = np.mean(category_similarities) if category_similarities else 0
+    overall_quality = (amount_similarity + category_similarity) / 2
+    
+    print(f"\n📊 QUALITY SCORES:")
+    print(f"Amount Similarity:     {amount_similarity:.3f}")
+    print(f"Category Similarity:   {category_similarity:.3f}")
+    print(f"Overall Quality:       {overall_quality:.3f}")
+    
+    # Quality assessment
+    if overall_quality >= 0.8:
+        assessment = "🟢 EXCELLENT - Ready for production"
+    elif overall_quality >= 0.7:
+        assessment = "🟡 GOOD - Minor adjustments needed"
+    elif overall_quality >= 0.6:
+        assessment = "🟠 FAIR - Some improvements required"
+    else:
+        assessment = "🔴 POOR - Significant improvements needed"
+    
+    print(f"\nAssessment: {assessment}")
+    
+    return overall_quality
+
+# Run quick validation
+try:
+    quality_score = quick_validation(original_data, synthetic_data)
+    
+    print("\n" + "=" * 50)
+    print("✅ VALIDATION COMPLETE")
+    print(f"Your VAE model achieved a quality score of {quality_score:.3f}")
+    
+    if quality_score >= 0.7:
+        print("\n🎉 SUCCESS! Your model is working well.")
+        print("Next steps:")
+        print("1. Try with your actual 3.5K data")
+        print("2. Scale up to larger datasets")
+        print("3. Run comprehensive validation")
+    else:
+        print("\n⚠️ TUNING NEEDED:")
+        print("1. Increase training epochs")
+        print("2. Adjust latent dimensions")
+        print("3. Modify network architecture")
+
+except Exception as e:
+    print(f"\n❌ Validation failed with error: {str(e)}")
+    print("Proceeding to next validation step...")
