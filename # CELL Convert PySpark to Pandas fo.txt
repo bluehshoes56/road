@@ -1,14 +1,17 @@
-# Display 10 transactions with diverse payer companies (3+2+4+1 pattern)
-print("📋 ORIGINAL DATA SAMPLE - 10 Transactions with Diverse Payers")
+# Display 10 transactions with diverse payer companies (3+2+4+1 pattern) AND diverse payee companies
+print("📋 ORIGINAL DATA SAMPLE - 10 Transactions with Diverse Payers AND Payees")
 print("=" * 60)
 
 # Get unique payer companies and their transaction counts
 unique_payers = original_data['payer_Company_Name'].unique()
+unique_payees = original_data['payee_Company_Name'].unique()
+
 payer_counts = {}
 for payer in unique_payers:
     payer_counts[payer] = len(original_data[original_data['payer_Company_Name'] == payer])
 
 print(f"Total unique payers in dataset: {len(unique_payers)}")
+print(f"Total unique payees in dataset: {len(unique_payees)}")
 
 # Find payers with sufficient transactions for each requirement
 payers_with_3_plus = [payer for payer, count in payer_counts.items() if count >= 3]
@@ -22,26 +25,53 @@ print(f"Payers with 2+ transactions: {len(payers_with_2_plus)}")
 
 # Select appropriate payers for the pattern
 sample_rows = []
+used_payees = set()  # Track used payees to ensure diversity
+
+# Helper function to get diverse transactions
+def get_diverse_transactions(payer_data, needed_count, used_payees_set):
+    """Get transactions with diverse payees"""
+    diverse_transactions = []
+    remaining_data = payer_data.copy()
+    
+    # First, try to get transactions with unused payees
+    for _, row in remaining_data.iterrows():
+        if row['payee_Company_Name'] not in used_payees_set and len(diverse_transactions) < needed_count:
+            diverse_transactions.append(row)
+            used_payees_set.add(row['payee_Company_Name'])
+    
+    # If we still need more transactions, fill with remaining ones
+    if len(diverse_transactions) < needed_count:
+        for _, row in remaining_data.iterrows():
+            if len(diverse_transactions) < needed_count:
+                # Skip if already added
+                if not any((existing_row == row).all() for existing_row in diverse_transactions):
+                    diverse_transactions.append(row)
+    
+    return pd.DataFrame(diverse_transactions[:needed_count])
 
 # First 3 rows - Use first payer with 3+ transactions
 payer1 = payers_with_3_plus[0]
-payer1_data = original_data[original_data['payer_Company_Name'] == payer1].head(3)
-sample_rows.append(payer1_data)
+payer1_data = original_data[original_data['payer_Company_Name'] == payer1]
+payer1_sample = get_diverse_transactions(payer1_data, 3, used_payees)
+sample_rows.append(payer1_sample)
 
 # Next 2 rows - Use second payer with 2+ transactions (different from first)
 payer2 = next(p for p in payers_with_2_plus if p != payer1)
-payer2_data = original_data[original_data['payer_Company_Name'] == payer2].head(2)
-sample_rows.append(payer2_data)
+payer2_data = original_data[original_data['payer_Company_Name'] == payer2]
+payer2_sample = get_diverse_transactions(payer2_data, 2, used_payees)
+sample_rows.append(payer2_sample)
 
 # Next 4 rows - Use first payer with 4+ transactions (different from first two)
 payer3 = next(p for p in payers_with_4_plus if p not in [payer1, payer2])
-payer3_data = original_data[original_data['payer_Company_Name'] == payer3].head(4)
-sample_rows.append(payer3_data)
+payer3_data = original_data[original_data['payer_Company_Name'] == payer3]
+payer3_sample = get_diverse_transactions(payer3_data, 4, used_payees)
+sample_rows.append(payer3_sample)
 
 # Final 1 row - Use different payer
 payer4 = next(p for p in payers_with_1_plus if p not in [payer1, payer2, payer3])
-payer4_data = original_data[original_data['payer_Company_Name'] == payer4].head(1)
-sample_rows.append(payer4_data)
+payer4_data = original_data[original_data['payer_Company_Name'] == payer4]
+payer4_sample = get_diverse_transactions(payer4_data, 1, used_payees)
+sample_rows.append(payer4_sample)
 
 # Combine all sample rows
 sample_data = pd.concat(sample_rows)[['payer_Company_Name', 'payee_Company_Name', 'ed_amount', 'fh_file_creation_date', 'fh_file_creation_time']]
@@ -66,83 +96,11 @@ print(f"Rows 1-3: {payer1} ({payer_counts[payer1]} transactions available)")
 print(f"Rows 4-5: {payer2} ({payer_counts[payer2]} transactions available)")
 print(f"Rows 6-9: {payer3} ({payer_counts[payer3]} transactions available)")
 print(f"Row 10: {payer4} ({payer_counts[payer4]} transactions available)")
-print(f"\nFinal sample contains {len(sample_formatted)} transactions")
-print(f"\nOriginal dataset contains {len(original_data):,} total transactions")
 
+# Show payee diversity
+unique_payees_in_sample = sample_formatted['Payee_Company'].nunique()
+print(f"\nPayee Diversity: {unique_payees_in_sample} unique payees out of 10 transactions")
+print(f"Payees used: {list(sample_formatted['Payee_Company'].unique())}")
 
-
-====================================================
-
-
-
-
-# Display 10 transactions with diverse payer companies (3+2+4+1 pattern)
-print("📋 ORIGINAL DATA SAMPLE - 10 Transactions with Diverse Payers")
-print("=" * 60)
-
-# Get unique payer companies and their transaction counts
-unique_payers = original_data['payer_Company_Name'].unique()
-payer_counts = {}
-for payer in unique_payers:
-    payer_counts[payer] = len(original_data[original_data['payer_Company_Name'] == payer])
-
-print(f"Total unique payers in dataset: {len(unique_payers)}")
-
-# Find payers with sufficient transactions for each requirement
-payers_with_3_plus = [payer for payer, count in payer_counts.items() if count >= 3]
-payers_with_2_plus = [payer for payer, count in payer_counts.items() if count >= 2]  
-payers_with_4_plus = [payer for payer, count in payer_counts.items() if count >= 4]
-payers_with_1_plus = [payer for payer, count in payer_counts.items() if count >= 1]
-
-print(f"\nPayers with 4+ transactions: {len(payers_with_4_plus)}")
-print(f"Payers with 3+ transactions: {len(payers_with_3_plus)}")
-print(f"Payers with 2+ transactions: {len(payers_with_2_plus)}")
-
-# Select appropriate payers for the pattern
-sample_rows = []
-
-# First 3 rows - Use first payer with 3+ transactions
-payer1 = payers_with_3_plus[0]
-payer1_data = original_data[original_data['payer_Company_Name'] == payer1].head(3)
-sample_rows.append(payer1_data)
-
-# Next 2 rows - Use second payer with 2+ transactions (different from first)
-payer2 = next(p for p in payers_with_2_plus if p != payer1)
-payer2_data = original_data[original_data['payer_Company_Name'] == payer2].head(2)
-sample_rows.append(payer2_data)
-
-# Next 4 rows - Use first payer with 4+ transactions (different from first two)
-payer3 = next(p for p in payers_with_4_plus if p not in [payer1, payer2])
-payer3_data = original_data[original_data['payer_Company_Name'] == payer3].head(4)
-sample_rows.append(payer3_data)
-
-# Final 1 row - Use different payer
-payer4 = next(p for p in payers_with_1_plus if p not in [payer1, payer2, payer3])
-payer4_data = original_data[original_data['payer_Company_Name'] == payer4].head(1)
-sample_rows.append(payer4_data)
-
-# Combine all sample rows
-sample_data = pd.concat(sample_rows)[['payer_Company_Name', 'payee_Company_Name', 'ed_amount', 'fh_file_creation_date', 'fh_file_creation_time']]
-
-# Format for better display
-sample_formatted = sample_data.copy()
-sample_formatted['ed_amount'] = sample_formatted['ed_amount'].apply(lambda x: f"${x:,.2f}")
-sample_formatted['fh_file_creation_date'] = sample_formatted['fh_file_creation_date'].astype(str)
-sample_formatted['fh_file_creation_time'] = sample_formatted['fh_file_creation_time'].astype(str).str.zfill(4)
-
-# Rename columns for clarity
-sample_formatted.columns = ['Payer_Company', 'Payee_Company', 'Transaction_Amount', 'Transaction_Date', 'Transaction_Time']
-
-# Add row numbers to show the pattern
-sample_formatted.reset_index(drop=True, inplace=True)
-sample_formatted.index = sample_formatted.index + 1
-
-display(sample_formatted)
-
-print(f"\nPattern achieved:")
-print(f"Rows 1-3: {payer1} ({payer_counts[payer1]} transactions available)")
-print(f"Rows 4-5: {payer2} ({payer_counts[payer2]} transactions available)")
-print(f"Rows 6-9: {payer3} ({payer_counts[payer3]} transactions available)")
-print(f"Row 10: {payer4} ({payer_counts[payer4]} transactions available)")
 print(f"\nFinal sample contains {len(sample_formatted)} transactions")
 print(f"\nOriginal dataset contains {len(original_data):,} total transactions")
