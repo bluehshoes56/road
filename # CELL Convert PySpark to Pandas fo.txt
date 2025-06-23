@@ -56,6 +56,246 @@ if hasattr(history, 'history') and 'loss' in history.history:
     plt.ylabel('Loss')
     plt.legend()
     plt.grid(True, alpha=0.3)
+
+
+
+
+
+
+
+config file:
+
+"""
+Global Configuration for VAE Synthetic Data Generator
+All major settings are controlled here with clear documentation.
+"""
+
+import os
+from dataclasses import dataclass, field
+from typing import Dict, List, Optional
+
+@dataclass
+class GlobalConfig:
+    """
+    Comprehensive configuration class for VAE synthetic data generation.
+    All parameters are explicitly documented for Azure Databricks deployment.
+    """
+    
+    # ===== DATASET SCALING CONFIGURATION =====
+    # Tiered sampling strategy for iterative development
+    DATASET_SIZES = {
+        'PROTOTYPE': 3500,      # Initial development and testing
+        'SMALL': 25000,         # Small-scale validation
+        'MEDIUM': 100000,       # Medium-scale testing
+        'LARGE': 250000,        # Large-scale validation
+        'FULL': 552000          # Full production dataset
+    }
+    
+    # Current dataset size selection
+    CURRENT_SIZE: str = 'SMALL'  # Using 24,188 rows (actual dataset size)
+    
+    # ===== VAE MODEL ARCHITECTURE =====
+    # Latent space dimensions - critical for data complexity handling
+    LATENT_DIM: int = 32           # Increased for better diversity with financial data
+    
+    # Neural network architecture
+    ENCODER_LAYERS: List[int] = field(default_factory=lambda: [256, 128, 64])     # Encoder hidden layers
+    DECODER_LAYERS: List[int] = field(default_factory=lambda: [64, 128, 256])     # Decoder hidden layers
+    ACTIVATION: str = 'relu'                       # Activation function
+    
+    # Training parameters optimized for Azure Databricks
+    BATCH_SIZE: int = 256          # Optimized for GPU memory
+    EPOCHS: int = 100              # Training epochs (5 min target for prototype)
+    LEARNING_RATE: float = 5e-4    # Reduced for more stable learning
+    BETA_KL: float = 0.5           # Reduced for better diversity (β-VAE parameter)
+    
+    # ===== DATA TYPE CONFIGURATION =====
+    # Column specifications matching your financial dataset
+    CATEGORICAL_COLUMNS = [
+        'payer_Company_Name',
+        'payee_Company_Name', 
+        'payer_industry',
+        'payee_industry',
+        'payer_GICS',
+        'payee_GICS',
+        'payer_subindustry',
+        'payee_subindustry'
+    ]
+    
+    NUMERICAL_COLUMNS = [
+        'ed_amount',
+        'fh_file_creation_date',
+        'fh_file_creation_time'
+    ]
+    
+    # ===== STATISTICAL FIDELITY CONTROLS =====
+    # Balance between statistical accuracy and edge case generation
+    STATISTICAL_MATCH_RATIO: float = 0.90    # 90% statistical similarity
+    EDGE_CASE_RATIO: float = 0.10            # 10% edge case generation
+    
+    # Correlation preservation thresholds
+    MIN_CORRELATION_PRESERVATION: float = 0.85  # Minimum correlation match
+    
+    # ===== COLUMN-SPECIFIC RANGE CONTROLS =====
+    # User-defined min/max constraints with business logic
+    COLUMN_RANGES = {
+        'ed_amount': {
+            'min': 0.01,           # Minimum transaction amount ($0.01)
+            'max': 1000000.0,      # Maximum transaction amount ($1M)
+            'description': 'Transaction amounts in USD, realistic business range'
+        },
+        'fh_file_creation_date': {
+            'min': 250000,         # Date range minimum (YYMMDD format)
+            'max': 260000,         # Date range maximum 
+            'description': 'File creation dates in YYMMDD format'
+        },
+        'fh_file_creation_time': {
+            'min': 0,              # Time minimum (HHMM format)
+            'max': 2359,           # Time maximum (23:59)
+            'description': 'File creation times in HHMM format (24-hour)'
+        }
+    }
+    
+    # ===== PRIVACY CONFIGURATION =====
+    # Privacy-preserving options for compliance
+    ENABLE_DIFFERENTIAL_PRIVACY: bool = False     # Disabled by default for performance
+    DP_EPSILON: float = 2.0                       # Privacy budget (when DP enabled)
+    DP_DELTA: float = 1e-5                        # DP delta parameter
+    
+    # Privacy compliance modes
+    PRIVACY_MODE: str = 'STANDARD'                # Options: STANDARD, GDPR, PCI_DSS, GLBA
+    
+    # Compliance settings per mode
+    PRIVACY_SETTINGS = {
+        'STANDARD': {
+            'min_k_anonymity': 5,
+            'enable_noise_injection': False,
+            'record_linkage_prevention': True
+        },
+        'GDPR': {
+            'min_k_anonymity': 10,
+            'enable_noise_injection': True,
+            'record_linkage_prevention': True,
+            'right_to_be_forgotten': True
+        },
+        'PCI_DSS': {
+            'min_k_anonymity': 15,
+            'enable_noise_injection': True,
+            'record_linkage_prevention': True,
+            'tokenization_required': True
+        },
+        'GLBA': {
+            'min_k_anonymity': 8,
+            'enable_noise_injection': True,
+            'record_linkage_prevention': True,
+            'financial_privacy_controls': True
+        }
+    }
+    
+    # ===== AZURE DATABRICKS OPTIMIZATION =====
+    # Infrastructure-specific settings
+    USE_GPU_ACCELERATION: bool = True             # Enable GPU training
+    DATABRICKS_WORKERS: int = 20                  # Worker node count
+    DATABRICKS_CORES: int = 704                   # Total core count
+    DATABRICKS_MEMORY_GB: int = 2818              # Total memory
+    
+    # Memory management
+    ENABLE_MEMORY_OPTIMIZATION: bool = True      # Memory-efficient loading
+    CHECKPOINT_FREQUENCY: int = 10               # Model checkpoint every N epochs
+    
+    # ===== EVALUATION CONFIGURATION =====
+    # Comprehensive evaluation metrics
+    EVALUATION_METRICS = [
+        'statistical_similarity',    # Distribution matching
+        'correlation_preservation',  # Relationship maintenance
+        'privacy_validation',        # Non-traceability checks
+        'business_logic_validation', # Domain-specific rules
+        'edge_case_coverage'         # Rare event representation
+    ]
+    
+    # Statistical test thresholds
+    KS_TEST_THRESHOLD: float = 0.05              # Kolmogorov-Smirnov test
+    CHI_SQUARE_THRESHOLD: float = 0.05           # Chi-square test for categoricals
+    CORRELATION_THRESHOLD: float = 0.1           # Correlation difference tolerance
+    
+    # ===== FEATURE ENGINEERING =====
+    # Modular feature selection (11 columns expandable)
+    ENABLED_FEATURES = {
+        'company_interactions': True,     # Payer-payee relationships
+        'industry_hierarchies': True,    # GICS and sub-industry patterns
+        'temporal_patterns': True,       # Date/time relationships
+        'transaction_amounts': True,     # Amount distributions
+        'cross_industry_flows': True,    # Inter-industry transactions
+    }
+    
+    # Feature engineering parameters
+    COMPANY_NAME_ENCODING: str = 'label'         # Options: label, hash, embedding
+    INDUSTRY_HIERARCHY_DEPTH: int = 3           # Levels of industry categorization
+    
+    # ===== OUTPUT CONFIGURATION =====
+    # Generated data specifications
+    OUTPUT_FORMAT: str = 'pandas'               # Options: pandas, csv, parquet
+    INCLUDE_METADATA: bool = True               # Include generation metadata
+    
+    # Quality assurance
+    ENABLE_POST_GENERATION_VALIDATION: bool = True
+    VALIDATION_SAMPLE_SIZE: int = 1000          # Sample size for validation
+    
+    @classmethod
+    def get_current_dataset_size(cls) -> int:
+        """Get the currently configured dataset size."""
+        return cls.DATASET_SIZES[cls.CURRENT_SIZE]
+    
+    @classmethod
+    def get_privacy_settings(cls) -> Dict:
+        """Get privacy settings for current compliance mode."""
+        return cls.PRIVACY_SETTINGS[cls.PRIVACY_MODE]
+    
+    @classmethod
+    def validate_config(cls) -> bool:
+        """Validate configuration consistency."""
+        # Check that ratios sum to 1.0
+        if abs(cls.STATISTICAL_MATCH_RATIO + cls.EDGE_CASE_RATIO - 1.0) > 1e-6:
+            raise ValueError("Statistical match ratio and edge case ratio must sum to 1.0")
+        
+        # Validate dataset size selection
+        if cls.CURRENT_SIZE not in cls.DATASET_SIZES:
+            raise ValueError(f"Invalid dataset size: {cls.CURRENT_SIZE}")
+        
+        # Validate privacy mode
+        if cls.PRIVACY_MODE not in cls.PRIVACY_SETTINGS:
+            raise ValueError(f"Invalid privacy mode: {cls.PRIVACY_MODE}")
+        
+        return True
+
+# Environment-specific overrides for Azure Databricks
+def load_databricks_config():
+    """Load Databricks-specific configuration from environment variables."""
+    config_overrides = {}
+    
+    # Check for Databricks environment
+    if os.getenv('DATABRICKS_RUNTIME_VERSION'):
+        config_overrides['USE_GPU_ACCELERATION'] = True
+        config_overrides['ENABLE_MEMORY_OPTIMIZATION'] = True
+        
+        # Override batch size based on available memory
+        available_memory = os.getenv('SPARK_DRIVER_MEMORY', '8g')
+        if 'g' in available_memory:
+            memory_gb = int(available_memory.replace('g', ''))
+            if memory_gb >= 16:
+                config_overrides['BATCH_SIZE'] = 512
+            elif memory_gb >= 8:
+                config_overrides['BATCH_SIZE'] = 256
+            else:
+                config_overrides['BATCH_SIZE'] = 128
+    
+    return config_overrides
+
+# Configuration validation on import
+GlobalConfig.validate_config()
+
+# Export main configuration instance
+config = GlobalConfig()
     plt.show()
 
 print(f"\n🎉 VAE model training successful! Ready to generate synthetic data.")s
