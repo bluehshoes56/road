@@ -1,1 +1,18 @@
-#z
+# Display first 10 transactions from original data
+print("📋 ORIGINAL DATA SAMPLE - First 10 Transactions")
+print("=" * 60)
+
+sample_data = original_data.head(10)[['payer_Company_Name', 'payee_Company_Name', 'ed_amount', 'fh_file_creation_date', 'fh_file_creation_time']]
+
+# Format for better display
+sample_formatted = sample_data.copy()
+sample_formatted['ed_amount'] = sample_formatted['ed_amount'].apply(lambda x: f"${x:,.2f}")
+sample_formatted['fh_file_creation_date'] = sample_formatted['fh_file_creation_date'].astype(str)
+sample_formatted['fh_file_creation_time'] = sample_formatted['fh_file_creation_time'].astype(str).str.zfill(4)
+
+# Rename columns for clarity
+sample_formatted.columns = ['Payer_Company', 'Payee_Company', 'Transaction_Amount', 'Transaction_Date', 'Transaction_Time']
+
+display(sample_formatted)
+
+print(f"\nOriginal dataset contains {len(original_data):,} total transactions")
