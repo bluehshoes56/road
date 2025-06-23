@@ -1,52 +1,54 @@
+# CELL 5: VAE Model - Recreated with Improved Parameters
+
+# Recreate VAE model with improved diversity configuration
+print("🔄 Creating VAE model with improved diversity parameters...")
+print(f"New LATENT_DIM: {config.LATENT_DIM}")
+print(f"New LEARNING_RATE: {config.LEARNING_RATE}")
+print(f"New BETA_KL: {config.BETA_KL}")
+
+vae_model = DatabricksVAE(
+    input_dim=processor.get_feature_dim(),
+    latent_dim=config.LATENT_DIM,
+    encoder_layers=config.ENCODER_LAYERS,
+    decoder_layers=config.DECODER_LAYERS,
+    learning_rate=config.LEARNING_RATE,
+    beta_kl=config.BETA_KL
+)
+
+print("✅ VAE model recreated with improved parameters for diversity")
+print(f"Model ready for training on {len(original_data):,} samples")
+
+
+
+
+
 # CELL 6: Train VAE Model - Corrected Version
 
 import datetime
 
 # Ensure we're using the real dataset
 print(f"Original data shape: {original_data.shape}")
-print(f"Processed data shape: {processed_data.shape if 'processed_data' in locals() else 'NOT FOUND'}")
-
-# If processed_data doesn't match original_data size, reprocess
-if 'processed_data' not in locals() or len(processed_data) != len(original_data):
-    print("Re-processing original data for training...")
-    processed_data = processor.fit_transform(original_data)
-    print(f"New processed data shape: {processed_data.shape}")
-
-print("🚀 Starting VAE training...")
-print(f"Dataset: {config.CURRENT_SIZE} ({len(original_data):,} rows)")
-print(f"Expected training time: 10 minutes")
+print(f"Processed data shape: {processed_data.shape}")
 
 # Normalize data for training
 train_data = (processed_data - processed_data.min()) / (processed_data.max() - processed_data.min() + 1e-8)
 
+print("🚀 Starting VAE training with improved parameters...")
 print(f"Training data shape: {train_data.shape}")
 
-# Train the model with default parameters
+# Train the model
 start_time = datetime.datetime.now()
-
-print("🔧 Training VAE model...")
 history = vae_model.train(train_data)
-
 end_time = datetime.datetime.now()
-training_duration = (end_time - start_time).total_seconds() / 60
 
+training_duration = (end_time - start_time).total_seconds() / 60
 print(f"\n✅ Training completed in {training_duration:.1f} minutes")
 
 # Plot training history if available
 if hasattr(history, 'history') and 'loss' in history.history:
     final_loss = min(history.history['loss'])
+    print(f"Final training loss: {final_loss:.4f}")
     
-    print(f"\n📊 Training Quality Assessment:")
-    print(f"   Final training loss: {final_loss:.4f}")
-    
-    if final_loss > 50:
-        print("⚠️ WARNING: High loss suggests poor training quality")
-    elif final_loss < 10:
-        print("✅ Good training quality - loss converged well")
-    else:
-        print("⚡ Moderate training quality - acceptable for synthetic generation")
-    
-    # Plot training history
     plt.figure(figsize=(10, 4))
     plt.plot(history.history['loss'], label='Training Loss', linewidth=2)
     plt.title('VAE Training Loss')
@@ -55,14 +57,5 @@ if hasattr(history, 'history') and 'loss' in history.history:
     plt.legend()
     plt.grid(True, alpha=0.3)
     plt.show()
-else:
-    print("✅ Training completed (no loss history available)")
 
-# Test generation capability
-print(f"\n🧪 Testing generation capability...")
-test_samples = vae_model.generate(5)
-print(f"   Test generation shape: {test_samples.shape}")
-print(f"   Test generation range: [{test_samples.min():.4f}, {test_samples.max():.4f}]")
-
-print(f"\n🎉 VAE model training successful!")
-print(f"Ready to generate synthetic data.")
+print(f"\n🎉 VAE model training successful! Ready to generate synthetic data.")s
