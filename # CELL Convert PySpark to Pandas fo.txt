@@ -1,106 +1,87 @@
-# Display 10 transactions with diverse payer companies (3+2+4+1 pattern) AND diverse payee companies
-print("📋 ORIGINAL DATA SAMPLE - 10 Transactions with Diverse Payers AND Payees")
+# Find payee with highest transaction count and analyze their top payers
+print("🏆 TOP PAYEE ANALYSIS - Detailed Payer Breakdown")
 print("=" * 60)
 
-# Get unique payer companies and their transaction counts
-unique_payers = original_data['payer_Company_Name'].unique()
-unique_payees = original_data['payee_Company_Name'].unique()
+# Step 1: Find the payee with most incoming transactions
+payee_transaction_counts = original_data['payee_Company_Name'].value_counts()
+top_payee = payee_transaction_counts.index[0]
+top_payee_count = payee_transaction_counts.iloc[0]
 
-payer_counts = {}
-for payer in unique_payers:
-    payer_counts[payer] = len(original_data[original_data['payer_Company_Name'] == payer])
+print(f"🎯 PAYEE #1: {top_payee}")
+print("=" * 60)
 
-print(f"Total unique payers in dataset: {len(unique_payers)}")
-print(f"Total unique payees in dataset: {len(unique_payees)}")
+# Step 2: Get all transactions for this top payee
+top_payee_data = original_data[original_data['payee_Company_Name'] == top_payee].copy()
 
-# Find payers with sufficient transactions for each requirement
-payers_with_3_plus = [payer for payer, count in payer_counts.items() if count >= 3]
-payers_with_2_plus = [payer for payer, count in payer_counts.items() if count >= 2]  
-payers_with_4_plus = [payer for payer, count in payer_counts.items() if count >= 4]
-payers_with_1_plus = [payer for payer, count in payer_counts.items() if count >= 1]
+# Ensure ed_amount is numeric
+top_payee_data['ed_amount'] = pd.to_numeric(top_payee_data['ed_amount'], errors='coerce').fillna(0)
 
-print(f"\nPayers with 4+ transactions: {len(payers_with_4_plus)}")
-print(f"Payers with 3+ transactions: {len(payers_with_3_plus)}")
-print(f"Payers with 2+ transactions: {len(payers_with_2_plus)}")
+print(f"\n📊 PAYERS TO {top_payee}:")
+print(f"Total Transactions Received: {top_payee_count} (Original)")
+print(f"Total Amount Received: ${top_payee_data['ed_amount'].sum():,.0f} (Original)")
 
-# Select appropriate payers for the pattern
-sample_rows = []
-used_payees = set()  # Track used payees to ensure diversity
+# Count unique payers
+unique_payers_count = top_payee_data['payer_Company_Name'].nunique()
+print(f"Number of Different Payers: {unique_payers_count}")
 
-# Helper function to get diverse transactions
-def get_diverse_transactions(payer_data, needed_count, used_payees_set):
-    """Get transactions with diverse payees"""
-    diverse_transactions = []
-    remaining_data = payer_data.copy()
+# Step 3: Analyze each payer to this top payee
+payer_analysis = top_payee_data.groupby('payer_Company_Name').agg({
+    'ed_amount': ['count', 'sum', 'mean']
+}).round(2)
+
+# Flatten column names
+payer_analysis.columns = ['Orig_Count', 'Orig_Amount', 'Orig_Avg']
+payer_analysis = payer_analysis.reset_index()
+
+# Sort by transaction count (descending)
+payer_analysis = payer_analysis.sort_values('Orig_Count', ascending=False)
+
+# Format the detailed analysis table
+detailed_analysis = []
+for idx, row in payer_analysis.iterrows():
+    payer_name = row['payer_Company_Name']
+    orig_count = int(row['Orig_Count'])
+    orig_amount = row['Orig_Amount']
+    orig_avg = row['Orig_Avg']
     
-    # First, try to get transactions with unused payees
-    for _, row in remaining_data.iterrows():
-        if row['payee_Company_Name'] not in used_payees_set and len(diverse_transactions) < needed_count:
-            diverse_transactions.append(row)
-            used_payees_set.add(row['payee_Company_Name'])
+    # Truncate long company names
+    display_name = payer_name[:25] + '...' if len(payer_name) > 25 else payer_name
     
-    # If we still need more transactions, fill with remaining ones
-    if len(diverse_transactions) < needed_count:
-        for _, row in remaining_data.iterrows():
-            if len(diverse_transactions) < needed_count:
-                # Skip if already added
-                if not any((existing_row == row).all() for existing_row in diverse_transactions):
-                    diverse_transactions.append(row)
-    
-    return pd.DataFrame(diverse_transactions[:needed_count])
+    detailed_analysis.append({
+        'Payer': display_name,
+        'Orig_Count': orig_count,
+        'Orig_Amount': f"${orig_amount:,.0f}",
+        'Orig_Avg': f"${orig_avg:,.0f}"
+    })
 
-# First 3 rows - Use first payer with 3+ transactions
-payer1 = payers_with_3_plus[0]
-payer1_data = original_data[original_data['payer_Company_Name'] == payer1]
-payer1_sample = get_diverse_transactions(payer1_data, 3, used_payees)
-sample_rows.append(payer1_sample)
+# Convert to DataFrame for display
+detailed_df = pd.DataFrame(detailed_analysis)
 
-# Next 2 rows - Use second payer with 2+ transactions (different from first)
-payer2 = next(p for p in payers_with_2_plus if p != payer1)
-payer2_data = original_data[original_data['payer_Company_Name'] == payer2]
-payer2_sample = get_diverse_transactions(payer2_data, 2, used_payees)
-sample_rows.append(payer2_sample)
+# Add row numbers starting from 0 (like your screenshot)
+detailed_df.reset_index(drop=True, inplace=True)
 
-# Next 4 rows - Use first payer with 4+ transactions (different from first two)
-payer3 = next(p for p in payers_with_4_plus if p not in [payer1, payer2])
-payer3_data = original_data[original_data['payer_Company_Name'] == payer3]
-payer3_sample = get_diverse_transactions(payer3_data, 4, used_payees)
-sample_rows.append(payer3_sample)
+print(f"\n💰 DETAILED PAYER-TO-PAYEE ANALYSIS:")
+display(detailed_df)
 
-# Final 1 row - Use different payer
-payer4 = next(p for p in payers_with_1_plus if p not in [payer1, payer2, payer3])
-payer4_data = original_data[original_data['payer_Company_Name'] == payer4]
-payer4_sample = get_diverse_transactions(payer4_data, 1, used_payees)
-sample_rows.append(payer4_sample)
+# Add totals row
+total_count = payer_analysis['Orig_Count'].sum()
+total_amount = payer_analysis['Orig_Amount'].sum()
+total_avg = total_amount / total_count if total_count > 0 else 0
 
-# Combine all sample rows
-sample_data = pd.concat(sample_rows)[['payer_Company_Name', 'payee_Company_Name', 'ed_amount', 'fh_file_creation_date', 'fh_file_creation_time']]
+print(f"\n📋 TOTALS:")
+print(f"Total Transactions: {total_count:,}")
+print(f"Total Amount: ${total_amount:,.0f}")
+print(f"Average Transaction: ${total_avg:,.0f}")
 
-# Format for better display
-sample_formatted = sample_data.copy()
-sample_formatted['ed_amount'] = sample_formatted['ed_amount'].apply(lambda x: f"${x:,.2f}")
-sample_formatted['fh_file_creation_date'] = sample_formatted['fh_file_creation_date'].astype(str)
-sample_formatted['fh_file_creation_time'] = sample_formatted['fh_file_creation_time'].astype(str).str.zfill(4)
+# Show top 10 summary
+print(f"\n🔝 TOP 10 PAYERS SUMMARY:")
+top_10_summary = detailed_df.head(10).copy()
+top_10_summary.index = top_10_summary.index + 1  # Start numbering from 1
 
-# Rename columns for clarity
-sample_formatted.columns = ['Payer_Company', 'Payee_Company', 'Transaction_Amount', 'Transaction_Date', 'Transaction_Time']
+display(top_10_summary)
 
-# Add row numbers to show the pattern
-sample_formatted.reset_index(drop=True, inplace=True)
-sample_formatted.index = sample_formatted.index + 1
-
-display(sample_formatted)
-
-print(f"\nPattern achieved:")
-print(f"Rows 1-3: {payer1} ({payer_counts[payer1]} transactions available)")
-print(f"Rows 4-5: {payer2} ({payer_counts[payer2]} transactions available)")
-print(f"Rows 6-9: {payer3} ({payer_counts[payer3]} transactions available)")
-print(f"Row 10: {payer4} ({payer_counts[payer4]} transactions available)")
-
-# Show payee diversity
-unique_payees_in_sample = sample_formatted['Payee_Company'].nunique()
-print(f"\nPayee Diversity: {unique_payees_in_sample} unique payees out of 10 transactions")
-print(f"Payees used: {list(sample_formatted['Payee_Company'].unique())}")
-
-print(f"\nFinal sample contains {len(sample_formatted)} transactions")
-print(f"\nOriginal dataset contains {len(original_data):,} total transactions")
+print(f"\n✅ COMPANY-LEVEL CROSS-TABULATION SUMMARY")
+print("=" * 50)
+print(f"Analyzed payee: {top_payee}")
+print(f"Total payers analyzed: {len(payer_analysis)}")
+print(f"Showing detailed breakdown of all payer relationships")
