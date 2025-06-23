@@ -1,1 +1,240 @@
-#t
+# CELL 9: Complete Multi-Dimensional Validation Dashboard
+
+from matplotlib.gridspec import GridSpec
+from IPython.display import HTML, display
+import seaborn as sns
+from scipy import stats
+import numpy as np
+import matplotlib.pyplot as plt
+
+def complete_multidimensional_validation(original: pd.DataFrame, synthetic: pd.DataFrame):
+    """Complete validation with multi-dimensional analysis across all business dimensions."""
+    
+    print("🎯 COMPLETE MULTI-DIMENSIONAL VALIDATION DASHBOARD")
+    print("=" * 80)
+    
+    # Create copies to avoid modifying original data
+    orig_data = original.copy()
+    synth_data = synthetic.copy()
+    
+    # Fix numeric conversion at the very beginning
+    orig_data['ed_amount'] = pd.to_numeric(orig_data['ed_amount'], errors='coerce')
+    orig_data['ed_amount'] = orig_data['ed_amount'].fillna(0)
+    
+    synth_data['ed_amount'] = pd.to_numeric(synth_data['ed_amount'], errors='coerce')
+    synth_data['ed_amount'] = synth_data['ed_amount'].fillna(0)
+    
+    # =============================================
+    # SECTION 1: PAYER-CENTRIC ANALYSIS
+    # =============================================
+    print("\n💰 SECTION 1: PAYER-CENTRIC ANALYSIS")
+    print("=" * 50)
+    
+    try:
+        # Use simpler groupby approach to avoid the aggregation error
+        orig_payer_groups = orig_data.groupby('payer_Company_Name')
+        synth_payer_groups = synth_data.groupby('payer_Company_Name')
+        
+        # Calculate statistics manually
+        orig_payer_stats = []
+        for payer, group in orig_payer_groups:
+            stats_dict = {
+                'payer_Company_Name': payer,
+                'count': len(group),
+                'sum': group['ed_amount'].sum(),
+                'mean': group['ed_amount'].mean(),
+                'std': group['ed_amount'].std()
+            }
+            orig_payer_stats.append(stats_dict)
+        
+        orig_payer_df = pd.DataFrame(orig_payer_stats)
+        
+        synth_payer_stats = []
+        for payer, group in synth_payer_groups:
+            stats_dict = {
+                'payer_Company_Name': payer,
+                'count': len(group),
+                'sum': group['ed_amount'].sum(),
+                'mean': group['ed_amount'].mean(),
+                'std': group['ed_amount'].std()
+            }
+            synth_payer_stats.append(stats_dict)
+        
+        synth_payer_df = pd.DataFrame(synth_payer_stats)
+        
+        # Get top 10 payers by sum
+        top_payers = orig_payer_df.nlargest(10, 'sum')['payer_Company_Name'].tolist()
+        
+        payer_analysis = []
+        for payer in top_payers:
+            orig_row = orig_payer_df[orig_payer_df['payer_Company_Name'] == payer]
+            synth_row = synth_payer_df[synth_payer_df['payer_Company_Name'] == payer]
+            
+            if not orig_row.empty:
+                orig_count = orig_row['count'].iloc[0]
+                synth_count = synth_row['count'].iloc[0] if not synth_row.empty else 0
+                orig_avg = orig_row['mean'].iloc[0]
+                synth_avg = synth_row['mean'].iloc[0] if not synth_row.empty else 0
+                
+                count_diff = ((synth_count - orig_count) / orig_count * 100) if orig_count > 0 else 0
+                avg_diff = ((synth_avg - orig_avg) / orig_avg * 100) if orig_avg > 0 else 0
+                
+                payer_analysis.append({
+                    'Payer': payer[:30] + '...' if len(payer) > 30 else payer,
+                    'Orig_Count': orig_count,
+                    'Synth_Count': synth_count,
+                    'Count_Diff_%': f"{count_diff:+.1f}%",
+                    'Orig_Avg': f"${orig_avg:,.0f}",
+                    'Synth_Avg': f"${synth_avg:,.0f}",
+                    'Avg_Diff_%': f"{avg_diff:+.1f}%"
+                })
+        
+        payer_df = pd.DataFrame(payer_analysis)
+        print("\n💸 TOP PAYER COMPARISON:")
+        display(payer_df)
+        
+    except Exception as e:
+        print(f"⚠️ Error in payer analysis: {str(e)}")
+    
+    # =============================================
+    # SECTION 2: STATISTICAL SUMMARY
+    # =============================================
+    print("\n📊 SECTION 2: STATISTICAL SUMMARY")
+    print("=" * 50)
+    
+    # Basic statistics comparison
+    stats_comparison = {
+        'Metric': ['Total Transactions', 'Avg Amount', 'Total Volume', 'Unique Payers', 'Unique Payees'],
+        'Original': [
+            len(orig_data),
+            f"${orig_data['ed_amount'].mean():.2f}",
+            f"${orig_data['ed_amount'].sum():,.0f}",
+            orig_data['payer_Company_Name'].nunique(),
+            orig_data['payee_Company_Name'].nunique()
+        ],
+        'Synthetic': [
+            len(synth_data),
+            f"${synth_data['ed_amount'].mean():.2f}",
+            f"${synth_data['ed_amount'].sum():,.0f}",
+            synth_data['payer_Company_Name'].nunique(),
+            synth_data['payee_Company_Name'].nunique()
+        ]
+    }
+    
+    stats_df = pd.DataFrame(stats_comparison)
+    display(stats_df)
+    
+    # =============================================
+    # SECTION 3: AMOUNT DISTRIBUTION ANALYSIS
+    # =============================================
+    print("\n💵 SECTION 3: AMOUNT DISTRIBUTION ANALYSIS")
+    print("=" * 50)
+    
+    try:
+        # Statistical comparison
+        orig_mean = orig_data['ed_amount'].mean()
+        synth_mean = synth_data['ed_amount'].mean()
+        orig_median = orig_data['ed_amount'].median()
+        synth_median = synth_data['ed_amount'].median()
+        orig_std = orig_data['ed_amount'].std()
+        synth_std = synth_data['ed_amount'].std()
+        
+        amount_comparison = [
+            {
+                'Statistic': 'Mean',
+                'Original': f"${orig_mean:,.2f}",
+                'Synthetic': f"${synth_mean:,.2f}",
+                'Difference_%': f"{((synth_mean - orig_mean) / orig_mean * 100):+.1f}%" if orig_mean > 0 else "N/A"
+            },
+            {
+                'Statistic': 'Median',
+                'Original': f"${orig_median:,.2f}",
+                'Synthetic': f"${synth_median:,.2f}",
+                'Difference_%': f"{((synth_median - orig_median) / orig_median * 100):+.1f}%" if orig_median > 0 else "N/A"
+            },
+            {
+                'Statistic': 'Std Dev',
+                'Original': f"${orig_std:,.2f}",
+                'Synthetic': f"${synth_std:,.2f}",
+                'Difference_%': f"{((synth_std - orig_std) / orig_std * 100):+.1f}%" if orig_std > 0 else "N/A"
+            }
+        ]
+        
+        amount_df = pd.DataFrame(amount_comparison)
+        print("📊 AMOUNT STATISTICAL COMPARISON:")
+        display(amount_df)
+        
+        # Kolmogorov-Smirnov test
+        ks_statistic, ks_p_value = stats.ks_2samp(orig_data['ed_amount'], synth_data['ed_amount'])
+        print(f"\n📊 KOLMOGOROV-SMIRNOV TEST:")
+        print(f"KS Statistic: {ks_statistic:.4f}")
+        print(f"P-value: {ks_p_value:.4f}")
+        print(f"Result: {'✅ PASS' if ks_p_value > 0.05 else '⚠️ FAIL'} (α=0.05)")
+        
+    except Exception as e:
+        print(f"⚠️ Error in amount analysis: {str(e)}")
+        ks_p_value = 0.0
+    
+    # =============================================
+    # SECTION 4: QUALITY ASSESSMENT
+    # =============================================
+    print("\n🎯 SECTION 4: QUALITY ASSESSMENT")
+    print("=" * 50)
+    
+    try:
+        # Calculate similarity scores
+        amount_rel_diff = abs(orig_data['ed_amount'].mean() - synth_data['ed_amount'].mean()) / orig_data['ed_amount'].mean()
+        amount_similarity = max(0, 1 - amount_rel_diff)
+        
+        # Category coverage similarity
+        orig_companies = set(orig_data['payer_Company_Name']) | set(orig_data['payee_Company_Name'])
+        synth_companies = set(synth_data['payer_Company_Name']) | set(synth_data['payee_Company_Name'])
+        company_similarity = len(orig_companies & synth_companies) / len(orig_companies)
+        
+        # Overall quality
+        overall_quality = (amount_similarity + company_similarity) / 2
+        
+        print(f"📊 QUALITY SCORES:")
+        print(f"Amount Similarity: {amount_similarity:.3f}")
+        print(f"Company Coverage: {company_similarity:.3f}")
+        print(f"Overall Quality: {overall_quality:.3f}")
+        
+        if overall_quality >= 0.8:
+            assessment = "✅ EXCELLENT - High quality synthetic data"
+        elif overall_quality >= 0.65:
+            assessment = "⚡ GOOD - Acceptable synthetic data quality"
+        elif overall_quality >= 0.5:
+            assessment = "⚠️ MODERATE - Some improvements needed"
+        elif overall_quality >= 0.3:
+            assessment = "🔧 NEEDS WORK - Significant improvements required"
+        else:
+            assessment = "❌ POOR - Major reconstruction needed"
+        
+        print(f"\n🎯 FINAL ASSESSMENT: {assessment}")
+        
+    except Exception as e:
+        print(f"⚠️ Error in quality assessment: {str(e)}")
+        overall_quality = 0.0
+        assessment = "❌ ERROR - Could not calculate quality"
+    
+    print("\n" + "="*80)
+    print("✅ COMPLETE MULTI-DIMENSIONAL VALIDATION FINISHED")
+    print("📊 All business dimensions analyzed:")
+    print("   ✓ Payer-centric patterns")
+    print("   ✓ Statistical comparisons")
+    print("   ✓ Amount distribution analysis")
+    print("   ✓ Quality assessment")
+    print("=" * 80)
+    
+    return {
+        'overall_quality': overall_quality,
+        'assessment': assessment
+    }
+
+# Run complete multi-dimensional validation
+print("🔄 Running complete multi-dimensional validation analysis...")
+validation_results = complete_multidimensional_validation(original_data, synthetic_data)
+
+print(f"\n🎉 VALIDATION COMPLETED!")
+print(f"Final Quality Score: {validation_results['overall_quality']:.3f}")
+print(f"Assessment: {validation_results['assessment']}")
