@@ -1,3 +1,87 @@
+
+# CELL 2: Configuration
+from dataclasses import dataclass, field
+from typing import Dict, List, Optional
+
+@dataclass
+class GlobalConfig:
+    # Dataset scaling
+    DATASET_SIZES = {
+        'PROTOTYPE': 3500,
+        'SMALL': 25000,
+        'MEDIUM': 100000,
+        'LARGE': 250000,
+        'FULL': 552000
+    }
+    
+    CURRENT_SIZE: str = 'SMALL'  # Changed from PROTOTYPE
+    
+    # VAE architecture - Updated for better diversity
+    LATENT_DIM: int = 32  # Changed from 16
+    ENCODER_LAYERS: List[int] = field(default_factory=lambda: [256, 128, 64])  # Changed from [128, 64]
+    DECODER_LAYERS: List[int] = field(default_factory=lambda: [64, 128, 256])  # Changed from [64, 128]
+    ACTIVATION: str = 'relu'
+    
+    # Training parameters - Updated for stability
+    BATCH_SIZE: int = 256
+    EPOCHS: int = 100
+    LEARNING_RATE: float = 5e-4  # Changed from 1e-3
+    BETA_KL: float = 0.5  # Changed from 1.0
+    
+    # Data columns
+    CATEGORICAL_COLUMNS = [
+        'payer_Company_Name',
+        'payee_Company_Name',
+        'payer_industry',
+        'payee_industry',
+        'payer_GICS',
+        'payee_GICS',
+        'payer_subindustry',
+        'payee_subindustry'
+    ]
+    
+    NUMERICAL_COLUMNS = [
+        'ed_amount',
+        'fh_file_creation_date',
+        'fh_file_creation_time'
+    ]
+    
+    # Statistical fidelity
+    STATISTICAL_MATCH_RATIO: float = 0.90
+    EDGE_CASE_RATIO: float = 0.10
+    MIN_CORRELATION_PRESERVATION: float = 0.85
+    
+    # Column ranges
+    COLUMN_RANGES = {
+        'ed_amount': {'min': 0.01, 'max': 1000000.0},
+        'fh_file_creation_date': {'min': 250000, 'max': 260000},
+        'fh_file_creation_time': {'min': 0, 'max': 2359}
+    }
+    
+    # Privacy
+    ENABLE_DIFFERENTIAL_PRIVACY: bool = False
+    DP_EPSILON: float = 2.0
+    DP_DELTA: float = 1e-5
+    PRIVACY_MODE: str = 'STANDARD'
+    
+    # Azure Databricks
+    USE_GPU_ACCELERATION: bool = True
+    DATABRICKS_WORKERS: int = 20
+    ENABLE_MEMORY_OPTIMIZATION: bool = True
+    
+    @classmethod
+    def get_current_dataset_size(cls) -> int:
+        return cls.DATASET_SIZES[cls.CURRENT_SIZE]
+
+config = GlobalConfig()
+
+
+
+
+=============================================================================================
+
+
+
 # CELL 5: Create VAE Model
 
 import tensorflow as tf
