@@ -10,9 +10,10 @@ print(f"New LATENT_DIM: {config.LATENT_DIM}")
 print(f"New LEARNING_RATE: {config.LEARNING_RATE}")
 print(f"New BETA_KL: {config.BETA_KL}")
 
-# Calculate input dimension from processed_data shape
+# Get input dimension directly from processed_data shape
 input_dim = processed_data.shape[1]
-print(f"Input dimension from processed_data: {input_dim}")
+print(f"Input dimension: {input_dim}")
+print(f"Processed data shape: {processed_data.shape}")
 
 class DatabricksVAE:
     """Variational Autoencoder optimized for Azure Databricks financial data."""
