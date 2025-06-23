@@ -1,11 +1,119 @@
-# CELL 5: VAE Model - Recreated with Improved Parameters
+# CELL 5: Create VAE Model
 
-# Recreate VAE model with improved diversity configuration
+import tensorflow as tf
+from tensorflow.keras import layers, Model
+from tensorflow.keras.optimizers import Adam
+import numpy as np
+
 print("🔄 Creating VAE model with improved diversity parameters...")
 print(f"New LATENT_DIM: {config.LATENT_DIM}")
 print(f"New LEARNING_RATE: {config.LEARNING_RATE}")
 print(f"New BETA_KL: {config.BETA_KL}")
 
+class DatabricksVAE:
+    """Variational Autoencoder optimized for Azure Databricks financial data."""
+    
+    def __init__(self, input_dim, latent_dim=32, encoder_layers=[256, 128, 64], 
+                 decoder_layers=[64, 128, 256], learning_rate=5e-4, beta_kl=0.5):
+        self.input_dim = input_dim
+        self.latent_dim = latent_dim
+        self.encoder_layers = encoder_layers
+        self.decoder_layers = decoder_layers
+        self.learning_rate = learning_rate
+        self.beta_kl = beta_kl
+        
+        # Build the model
+        self.encoder = self._build_encoder()
+        self.decoder = self._build_decoder()
+        self.vae = self._build_vae()
+        
+        # Compile with improved optimizer
+        optimizer = Adam(learning_rate=self.learning_rate, clipnorm=1.0)
+        self.vae.compile(optimizer=optimizer)
+        
+        print(f"✅ VAE created: {input_dim}→{latent_dim} latent dimensions")
+        print(f"   Encoder: {encoder_layers}")
+        print(f"   Decoder: {decoder_layers}")
+    
+    def _build_encoder(self):
+        inputs = layers.Input(shape=(self.input_dim,))
+        x = inputs
+        
+        # Encoder layers with dropout for regularization
+        for units in self.encoder_layers:
+            x = layers.Dense(units, activation='relu')(x)
+            x = layers.BatchNormalization()(x)
+            x = layers.Dropout(0.2)(x)
+        
+        # Latent space parameters
+        z_mean = layers.Dense(self.latent_dim, name='z_mean')(x)
+        z_log_var = layers.Dense(self.latent_dim, name='z_log_var')(x)
+        
+        return Model(inputs, [z_mean, z_log_var], name='encoder')
+    
+    def _build_decoder(self):
+        latent_inputs = layers.Input(shape=(self.latent_dim,))
+        x = latent_inputs
+        
+        # Decoder layers
+        for units in self.decoder_layers:
+            x = layers.Dense(units, activation='relu')(x)
+            x = layers.BatchNormalization()(x)
+            x = layers.Dropout(0.1)(x)
+        
+        outputs = layers.Dense(self.input_dim, activation='sigmoid')(x)
+        
+        return Model(latent_inputs, outputs, name='decoder')
+    
+    def _sampling(self, args):
+        z_mean, z_log_var = args
+        batch = tf.shape(z_mean)[0]
+        dim = tf.shape(z_mean)[1]
+        epsilon = tf.keras.backend.random_normal(shape=(batch, dim))
+        return z_mean + tf.exp(0.5 * z_log_var) * epsilon
+    
+    def _build_vae(self):
+        inputs = layers.Input(shape=(self.input_dim,))
+        z_mean, z_log_var = self.encoder(inputs)
+        z = layers.Lambda(self._sampling, output_shape=(self.latent_dim,))([z_mean, z_log_var])
+        outputs = self.decoder(z)
+        
+        vae = Model(inputs, outputs, name='vae')
+        
+        # VAE loss with improved β-VAE formulation
+        reconstruction_loss = tf.reduce_mean(
+            tf.keras.losses.binary_crossentropy(inputs, outputs)
+        ) * self.input_dim
+        
+        kl_loss = 1 + z_log_var - tf.square(z_mean) - tf.exp(z_log_var)
+        kl_loss = tf.reduce_mean(kl_loss) * -0.5
+        
+        total_loss = reconstruction_loss + self.beta_kl * kl_loss
+        vae.add_loss(total_loss)
+        
+        return vae
+    
+    def train(self, data, epochs=100, batch_size=256, verbose=1):
+        """Train the VAE model with simplified interface."""
+        return self.vae.fit(
+            data, data,
+            epochs=epochs,
+            batch_size=batch_size,
+            verbose=verbose,
+            shuffle=True
+        )
+    
+    def generate(self, num_samples):
+        """Generate synthetic samples."""
+        random_latent = tf.random.normal(shape=(num_samples, self.latent_dim))
+        return self.decoder(random_latent).numpy()
+    
+    def encode(self, data):
+        """Encode data to latent space."""
+        z_mean, z_log_var = self.encoder(data)
+        return z_mean.numpy()
+
+# Create model instance with new parameters
 vae_model = DatabricksVAE(
     input_dim=processor.get_feature_dim(),
     latent_dim=config.LATENT_DIM,
@@ -16,8 +124,11 @@ vae_model = DatabricksVAE(
 )
 
 print("✅ VAE model recreated with improved parameters for diversity")
-print(f"Model ready for training on {len(original_data):,} samples")
 
+
+
+
+================================================================================================
 
 
 
@@ -35,6 +146,8 @@ train_data = (processed_data - processed_data.min()) / (processed_data.max() - p
 
 print("🚀 Starting VAE training with improved parameters...")
 print(f"Training data shape: {train_data.shape}")
+print(f"Dataset: {config.CURRENT_SIZE} ({len(original_data):,} rows)")
+print(f"Model config: LATENT_DIM={config.LATENT_DIM}, LR={config.LEARNING_RATE}, BETA_KL={config.BETA_KL}")
 
 # Train the model
 start_time = datetime.datetime.now()
@@ -44,258 +157,211 @@ end_time = datetime.datetime.now()
 training_duration = (end_time - start_time).total_seconds() / 60
 print(f"\n✅ Training completed in {training_duration:.1f} minutes")
 
-# Plot training history if available
+# Validate training quality
 if hasattr(history, 'history') and 'loss' in history.history:
     final_loss = min(history.history['loss'])
-    print(f"Final training loss: {final_loss:.4f}")
+    print(f"\n📊 Training Quality Assessment:")
+    print(f"   Final training loss: {final_loss:.4f}")
     
-    plt.figure(figsize=(10, 4))
+    if final_loss > 50:
+        print("⚠️ WARNING: High loss suggests poor training quality")
+    elif final_loss < 10:
+        print("✅ Good training quality - loss converged well")
+    else:
+        print("⚡ Moderate training quality - acceptable for synthetic generation")
+    
+    # Plot training history
+    plt.figure(figsize=(12, 4))
+    
+    plt.subplot(1, 2, 1)
     plt.plot(history.history['loss'], label='Training Loss', linewidth=2)
     plt.title('VAE Training Loss')
     plt.xlabel('Epoch')
     plt.ylabel('Loss')
     plt.legend()
     plt.grid(True, alpha=0.3)
-
-
-
-
-
-
-
-config file:
-
-"""
-Global Configuration for VAE Synthetic Data Generator
-All major settings are controlled here with clear documentation.
-"""
-
-import os
-from dataclasses import dataclass, field
-from typing import Dict, List, Optional
-
-@dataclass
-class GlobalConfig:
-    """
-    Comprehensive configuration class for VAE synthetic data generation.
-    All parameters are explicitly documented for Azure Databricks deployment.
-    """
     
-    # ===== DATASET SCALING CONFIGURATION =====
-    # Tiered sampling strategy for iterative development
-    DATASET_SIZES = {
-        'PROTOTYPE': 3500,      # Initial development and testing
-        'SMALL': 25000,         # Small-scale validation
-        'MEDIUM': 100000,       # Medium-scale testing
-        'LARGE': 250000,        # Large-scale validation
-        'FULL': 552000          # Full production dataset
-    }
+    plt.subplot(1, 2, 2)
+    loss_values = history.history['loss']
+    improvement_rate = [0] + [loss_values[i-1] - loss_values[i] for i in range(1, len(loss_values))]
+    plt.plot(improvement_rate, label='Loss Improvement', color='green', linewidth=2)
+    plt.title('Training Progress')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss Reduction')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
     
-    # Current dataset size selection
-    CURRENT_SIZE: str = 'SMALL'  # Using 24,188 rows (actual dataset size)
-    
-    # ===== VAE MODEL ARCHITECTURE =====
-    # Latent space dimensions - critical for data complexity handling
-    LATENT_DIM: int = 32           # Increased for better diversity with financial data
-    
-    # Neural network architecture
-    ENCODER_LAYERS: List[int] = field(default_factory=lambda: [256, 128, 64])     # Encoder hidden layers
-    DECODER_LAYERS: List[int] = field(default_factory=lambda: [64, 128, 256])     # Decoder hidden layers
-    ACTIVATION: str = 'relu'                       # Activation function
-    
-    # Training parameters optimized for Azure Databricks
-    BATCH_SIZE: int = 256          # Optimized for GPU memory
-    EPOCHS: int = 100              # Training epochs (5 min target for prototype)
-    LEARNING_RATE: float = 5e-4    # Reduced for more stable learning
-    BETA_KL: float = 0.5           # Reduced for better diversity (β-VAE parameter)
-    
-    # ===== DATA TYPE CONFIGURATION =====
-    # Column specifications matching your financial dataset
-    CATEGORICAL_COLUMNS = [
-        'payer_Company_Name',
-        'payee_Company_Name', 
-        'payer_industry',
-        'payee_industry',
-        'payer_GICS',
-        'payee_GICS',
-        'payer_subindustry',
-        'payee_subindustry'
-    ]
-    
-    NUMERICAL_COLUMNS = [
-        'ed_amount',
-        'fh_file_creation_date',
-        'fh_file_creation_time'
-    ]
-    
-    # ===== STATISTICAL FIDELITY CONTROLS =====
-    # Balance between statistical accuracy and edge case generation
-    STATISTICAL_MATCH_RATIO: float = 0.90    # 90% statistical similarity
-    EDGE_CASE_RATIO: float = 0.10            # 10% edge case generation
-    
-    # Correlation preservation thresholds
-    MIN_CORRELATION_PRESERVATION: float = 0.85  # Minimum correlation match
-    
-    # ===== COLUMN-SPECIFIC RANGE CONTROLS =====
-    # User-defined min/max constraints with business logic
-    COLUMN_RANGES = {
-        'ed_amount': {
-            'min': 0.01,           # Minimum transaction amount ($0.01)
-            'max': 1000000.0,      # Maximum transaction amount ($1M)
-            'description': 'Transaction amounts in USD, realistic business range'
-        },
-        'fh_file_creation_date': {
-            'min': 250000,         # Date range minimum (YYMMDD format)
-            'max': 260000,         # Date range maximum 
-            'description': 'File creation dates in YYMMDD format'
-        },
-        'fh_file_creation_time': {
-            'min': 0,              # Time minimum (HHMM format)
-            'max': 2359,           # Time maximum (23:59)
-            'description': 'File creation times in HHMM format (24-hour)'
-        }
-    }
-    
-    # ===== PRIVACY CONFIGURATION =====
-    # Privacy-preserving options for compliance
-    ENABLE_DIFFERENTIAL_PRIVACY: bool = False     # Disabled by default for performance
-    DP_EPSILON: float = 2.0                       # Privacy budget (when DP enabled)
-    DP_DELTA: float = 1e-5                        # DP delta parameter
-    
-    # Privacy compliance modes
-    PRIVACY_MODE: str = 'STANDARD'                # Options: STANDARD, GDPR, PCI_DSS, GLBA
-    
-    # Compliance settings per mode
-    PRIVACY_SETTINGS = {
-        'STANDARD': {
-            'min_k_anonymity': 5,
-            'enable_noise_injection': False,
-            'record_linkage_prevention': True
-        },
-        'GDPR': {
-            'min_k_anonymity': 10,
-            'enable_noise_injection': True,
-            'record_linkage_prevention': True,
-            'right_to_be_forgotten': True
-        },
-        'PCI_DSS': {
-            'min_k_anonymity': 15,
-            'enable_noise_injection': True,
-            'record_linkage_prevention': True,
-            'tokenization_required': True
-        },
-        'GLBA': {
-            'min_k_anonymity': 8,
-            'enable_noise_injection': True,
-            'record_linkage_prevention': True,
-            'financial_privacy_controls': True
-        }
-    }
-    
-    # ===== AZURE DATABRICKS OPTIMIZATION =====
-    # Infrastructure-specific settings
-    USE_GPU_ACCELERATION: bool = True             # Enable GPU training
-    DATABRICKS_WORKERS: int = 20                  # Worker node count
-    DATABRICKS_CORES: int = 704                   # Total core count
-    DATABRICKS_MEMORY_GB: int = 2818              # Total memory
-    
-    # Memory management
-    ENABLE_MEMORY_OPTIMIZATION: bool = True      # Memory-efficient loading
-    CHECKPOINT_FREQUENCY: int = 10               # Model checkpoint every N epochs
-    
-    # ===== EVALUATION CONFIGURATION =====
-    # Comprehensive evaluation metrics
-    EVALUATION_METRICS = [
-        'statistical_similarity',    # Distribution matching
-        'correlation_preservation',  # Relationship maintenance
-        'privacy_validation',        # Non-traceability checks
-        'business_logic_validation', # Domain-specific rules
-        'edge_case_coverage'         # Rare event representation
-    ]
-    
-    # Statistical test thresholds
-    KS_TEST_THRESHOLD: float = 0.05              # Kolmogorov-Smirnov test
-    CHI_SQUARE_THRESHOLD: float = 0.05           # Chi-square test for categoricals
-    CORRELATION_THRESHOLD: float = 0.1           # Correlation difference tolerance
-    
-    # ===== FEATURE ENGINEERING =====
-    # Modular feature selection (11 columns expandable)
-    ENABLED_FEATURES = {
-        'company_interactions': True,     # Payer-payee relationships
-        'industry_hierarchies': True,    # GICS and sub-industry patterns
-        'temporal_patterns': True,       # Date/time relationships
-        'transaction_amounts': True,     # Amount distributions
-        'cross_industry_flows': True,    # Inter-industry transactions
-    }
-    
-    # Feature engineering parameters
-    COMPANY_NAME_ENCODING: str = 'label'         # Options: label, hash, embedding
-    INDUSTRY_HIERARCHY_DEPTH: int = 3           # Levels of industry categorization
-    
-    # ===== OUTPUT CONFIGURATION =====
-    # Generated data specifications
-    OUTPUT_FORMAT: str = 'pandas'               # Options: pandas, csv, parquet
-    INCLUDE_METADATA: bool = True               # Include generation metadata
-    
-    # Quality assurance
-    ENABLE_POST_GENERATION_VALIDATION: bool = True
-    VALIDATION_SAMPLE_SIZE: int = 1000          # Sample size for validation
-    
-    @classmethod
-    def get_current_dataset_size(cls) -> int:
-        """Get the currently configured dataset size."""
-        return cls.DATASET_SIZES[cls.CURRENT_SIZE]
-    
-    @classmethod
-    def get_privacy_settings(cls) -> Dict:
-        """Get privacy settings for current compliance mode."""
-        return cls.PRIVACY_SETTINGS[cls.PRIVACY_MODE]
-    
-    @classmethod
-    def validate_config(cls) -> bool:
-        """Validate configuration consistency."""
-        # Check that ratios sum to 1.0
-        if abs(cls.STATISTICAL_MATCH_RATIO + cls.EDGE_CASE_RATIO - 1.0) > 1e-6:
-            raise ValueError("Statistical match ratio and edge case ratio must sum to 1.0")
-        
-        # Validate dataset size selection
-        if cls.CURRENT_SIZE not in cls.DATASET_SIZES:
-            raise ValueError(f"Invalid dataset size: {cls.CURRENT_SIZE}")
-        
-        # Validate privacy mode
-        if cls.PRIVACY_MODE not in cls.PRIVACY_SETTINGS:
-            raise ValueError(f"Invalid privacy mode: {cls.PRIVACY_MODE}")
-        
-        return True
-
-# Environment-specific overrides for Azure Databricks
-def load_databricks_config():
-    """Load Databricks-specific configuration from environment variables."""
-    config_overrides = {}
-    
-    # Check for Databricks environment
-    if os.getenv('DATABRICKS_RUNTIME_VERSION'):
-        config_overrides['USE_GPU_ACCELERATION'] = True
-        config_overrides['ENABLE_MEMORY_OPTIMIZATION'] = True
-        
-        # Override batch size based on available memory
-        available_memory = os.getenv('SPARK_DRIVER_MEMORY', '8g')
-        if 'g' in available_memory:
-            memory_gb = int(available_memory.replace('g', ''))
-            if memory_gb >= 16:
-                config_overrides['BATCH_SIZE'] = 512
-            elif memory_gb >= 8:
-                config_overrides['BATCH_SIZE'] = 256
-            else:
-                config_overrides['BATCH_SIZE'] = 128
-    
-    return config_overrides
-
-# Configuration validation on import
-GlobalConfig.validate_config()
-
-# Export main configuration instance
-config = GlobalConfig()
+    plt.tight_layout()
     plt.show()
+    
+    print(f"\n🔍 Training Diagnostics:")
+    print(f"   Total epochs completed: {len(history.history['loss'])}")
+    print(f"   Best epoch (lowest loss): {np.argmin(history.history['loss']) + 1}")
+    print(f"   Loss reduction: {history.history['loss'][0]:.4f} → {final_loss:.4f}")
 
-print(f"\n🎉 VAE model training successful! Ready to generate synthetic data.")s
+# Test generation capability
+print(f"\n🧪 Testing generation capability...")
+test_samples = vae_model.generate(5)
+print(f"   Test generation shape: {test_samples.shape}")
+print(f"   Test generation range: [{test_samples.min():.4f}, {test_samples.max():.4f}]")
+
+print(f"\n🎉 VAE model training successful! Ready to generate synthetic data.")
+
+
+=========================================================================
+
+
+
+
+# CELL 7: Generate Synthetic Data - Complete with Diversity
+
+import numpy as np
+import pandas as pd
+
+print("🔍 SYNTHETIC DATA GENERATION - WITH DIVERSITY INJECTION")
+print("=" * 60)
+
+# Generate synthetic data
+num_synthetic = len(original_data)
+print(f"Generating {num_synthetic:,} synthetic samples...")
+
+# Step 1: Generate latent samples and decode
+synthetic_processed = vae_model.generate(num_synthetic)
+print(f"✅ Generated synthetic features: {synthetic_processed.shape}")
+
+# Initialize result dataframe
+synthetic_data = pd.DataFrame()
+feature_idx = 0
+
+# Step 2: Reconstruct categorical columns WITH DIVERSITY INJECTION
+print(f"\n🔧 RECONSTRUCTING CATEGORICAL COLUMNS WITH DIVERSITY:")
+for col in config.CATEGORICAL_COLUMNS:
+    if hasattr(processor, 'label_encoders') and col in processor.label_encoders:
+        encoder = processor.label_encoders[col]
+        n_classes = len(encoder.classes_)
+        
+        print(f"  Processing {col} ({n_classes} classes)...")
+        
+        # Extract one-hot features
+        one_hot_features = synthetic_processed[:, feature_idx:feature_idx + n_classes]
+        
+        # Add controlled randomness to prevent identical outputs
+        noise = np.random.normal(0, 0.1, one_hot_features.shape)
+        one_hot_features_noisy = one_hot_features + noise
+        
+        # Convert to categorical indices with temperature sampling
+        temperature = 2.0  # Higher = more diversity
+        probabilities = np.exp(one_hot_features_noisy / temperature)
+        probabilities = probabilities / np.sum(probabilities, axis=1, keepdims=True)
+        
+        # Sample from probability distribution instead of argmax
+        categorical_indices = np.array([
+            np.random.choice(n_classes, p=prob) 
+            for prob in probabilities
+        ])
+        
+        # Decode to original values
+        decoded_values = encoder.inverse_transform(categorical_indices)
+        synthetic_data[col] = decoded_values
+        
+        unique_count = len(np.unique(decoded_values))
+        print(f"    ✅ Decoded to {unique_count} unique values")
+        
+        feature_idx += n_classes
+    else:
+        print(f"  ⚠️ No encoder for {col}, using random sampling")
+        synthetic_data[col] = np.random.choice(original_data[col].values, size=num_synthetic)
+
+# Step 3: Reconstruct numerical columns WITH DIVERSITY
+print(f"\n🔧 RECONSTRUCTING NUMERICAL COLUMNS WITH DIVERSITY:")
+numerical_features = synthetic_processed[:, feature_idx:]
+print(f"  Numerical features shape: {numerical_features.shape}")
+
+for i, col in enumerate(config.NUMERICAL_COLUMNS):
+    if i < numerical_features.shape[1]:
+        feature_col = numerical_features[:, i]
+        
+        # Add small amount of noise for diversity
+        noise = np.random.normal(0, 0.01, feature_col.shape)
+        feature_col_noisy = feature_col + noise
+        
+        # Try different scaler approaches
+        scaler_found = False
+        
+        # Option 1: Individual scalers
+        if hasattr(processor, 'scalers') and col in processor.scalers:
+            scaler = processor.scalers[col]
+            decoded_values = scaler.inverse_transform(feature_col_noisy.reshape(-1, 1)).flatten()
+            scaler_found = True
+        
+        # Option 2: Single numerical scaler
+        elif hasattr(processor, 'numerical_scaler') and processor.numerical_scaler is not None:
+            if len(config.NUMERICAL_COLUMNS) == 1:
+                decoded_values = processor.numerical_scaler.inverse_transform(feature_col_noisy.reshape(-1, 1)).flatten()
+            else:
+                # Multi-column scaler
+                if i == 0:  # Process all at once
+                    numerical_features_noisy = numerical_features + np.random.normal(0, 0.01, numerical_features.shape)
+                    all_decoded = processor.numerical_scaler.inverse_transform(numerical_features_noisy)
+                    for j, num_col in enumerate(config.NUMERICAL_COLUMNS):
+                        synthetic_data[num_col] = all_decoded[:, j]
+                    break
+                else:
+                    continue
+            scaler_found = True
+        
+        # Option 3: Manual scaling with diversity
+        if not scaler_found:
+            print(f"    ⚠️ No scaler found for {col}, using manual scaling with diversity")
+            orig_min = original_data[col].min()
+            orig_max = original_data[col].max()
+            orig_std = original_data[col].std()
+            
+            # Scale and add controlled variation
+            decoded_values = feature_col_noisy * (orig_max - orig_min) + orig_min
+            variation = np.random.normal(0, orig_std * 0.05, decoded_values.shape)
+            decoded_values = decoded_values + variation
+        
+        if col not in synthetic_data.columns:
+            synthetic_data[col] = decoded_values
+            print(f"    ✅ {col}: range [{decoded_values.min():.2f}, {decoded_values.max():.2f}]")
+
+# Step 4: Apply business constraints
+print(f"\n🔧 APPLYING BUSINESS CONSTRAINTS:")
+synthetic_data['ed_amount'] = np.clip(synthetic_data['ed_amount'], 0.01, 1000000.0)
+synthetic_data['fh_file_creation_date'] = synthetic_data['fh_file_creation_date'].astype(int)
+synthetic_data['fh_file_creation_time'] = np.clip(synthetic_data['fh_file_creation_time'].astype(int), 0, 2359)
+
+# Step 5: Final validation and diversity check
+print(f"\n✅ FINAL SYNTHETIC DATA:")
+print(f"   Shape: {synthetic_data.shape}")
+print(f"   Columns: {list(synthetic_data.columns)}")
+
+# Check categorical diversity
+print(f"\n📊 CATEGORICAL DIVERSITY CHECK:")
+for col in ['payer_Company_Name', 'payee_Company_Name', 'payer_industry', 'payer_GICS']:
+    if col in synthetic_data.columns and col in original_data.columns:
+        unique_count = synthetic_data[col].nunique()
+        orig_unique = original_data[col].nunique()
+        print(f"   {col}: {unique_count} synthetic vs {orig_unique} original")
+
+# Check for identical rows
+duplicate_rows = synthetic_data.duplicated().sum()
+print(f"\n🔍 UNIQUENESS CHECK:")
+print(f"   Duplicate rows: {duplicate_rows} out of {len(synthetic_data)}")
+print(f"   Unique rows: {len(synthetic_data) - duplicate_rows}")
+
+# Display sample with diversity verification
+print(f"\n📋 Sample synthetic data (showing diversity):")
+sample_indices = np.random.choice(len(synthetic_data), size=min(10, len(synthetic_data)), replace=False)
+display(synthetic_data.iloc[sample_indices])
+
+print(f"\n🎉 Synthetic data generation with diversity injection completed successfully!")
+print(f"Ready for validation in Cell 8 and comprehensive analysis in Cell 9.")
+
+
+
+============================================================================
+
+
+
