@@ -20,41 +20,16 @@ print(f"Expected training time: {2 if config.CURRENT_SIZE == 'TEST' else 10} min
 # Improved data normalization with numerical stability
 train_data = (processed_data - processed_data.min()) / (processed_data.max() - processed_data.min() + 1e-8)
 
-# Create validation split for better training monitoring
-split_idx = int(0.8 * len(train_data))
-train_split = train_data[:split_idx]
-val_split = train_data[split_idx:]
-
-print(f"Training split: {len(train_split):,} samples")
-print(f"Validation split: {len(val_split):,} samples")
-
-# Configure improved training callbacks
-callbacks = [
-    EarlyStopping(
-        patience=15, 
-        restore_best_weights=True, 
-        monitor='val_loss',
-        verbose=1
-    ),
-    ReduceLROnPlateau(
-        patience=8, 
-        factor=0.5, 
-        min_lr=1e-6, 
-        monitor='val_loss',
-        verbose=1
-    )
-]
+print(f"Training data shape: {train_data.shape}")
 
 # Train the model with improved configuration
 start_time = datetime.datetime.now()
 
 print("🔧 Training VAE model with improved parameters...")
 history = vae_model.train(
-    train_split,
-    validation_data=val_split,
+    train_data,
     epochs=100,
     batch_size=128,  # Smaller batch size for stability
-    callbacks=callbacks,
     verbose=1
 )
 
@@ -65,11 +40,9 @@ print(f"\n✅ Training completed in {training_duration:.1f} minutes")
 
 # Validate training quality
 final_loss = min(history.history['loss'])
-final_val_loss = min(history.history['val_loss'])
 
 print(f"\n📊 Training Quality Assessment:")
 print(f"   Final training loss: {final_loss:.4f}")
-print(f"   Final validation loss: {final_val_loss:.4f}")
 
 if final_loss > 50:
     print("⚠️ WARNING: High loss suggests poor training quality")
@@ -79,30 +52,18 @@ elif final_loss < 10:
 else:
     print("⚡ Moderate training quality - acceptable for synthetic generation")
 
-# Plot training history with improved visualization
-plt.figure(figsize=(15, 5))
+# Plot training history
+plt.figure(figsize=(12, 4))
 
-plt.subplot(1, 3, 1)
+plt.subplot(1, 2, 1)
 plt.plot(history.history['loss'], label='Training Loss', linewidth=2)
-if 'val_loss' in history.history:
-    plt.plot(history.history['val_loss'], label='Validation Loss', linewidth=2)
 plt.title('VAE Training Loss')
 plt.xlabel('Epoch')
 plt.ylabel('Loss')
 plt.legend()
 plt.grid(True, alpha=0.3)
 
-plt.subplot(1, 3, 2)
-if 'lr' in history.history:
-    plt.plot(history.history['lr'], label='Learning Rate', color='orange', linewidth=2)
-    plt.title('Learning Rate Schedule')
-    plt.xlabel('Epoch')
-    plt.ylabel('Learning Rate')
-    plt.yscale('log')
-    plt.legend()
-    plt.grid(True, alpha=0.3)
-
-plt.subplot(1, 3, 3)
+plt.subplot(1, 2, 2)
 # Plot loss improvement rate
 loss_values = history.history['loss']
 improvement_rate = [0] + [loss_values[i-1] - loss_values[i] for i in range(1, len(loss_values))]
