@@ -16,3 +16,167 @@ sample_formatted.columns = ['Payer_Company', 'Payee_Company', 'Transaction_Amoun
 display(sample_formatted)
 
 print(f"\nOriginal dataset contains {len(original_data):,} total transactions")
+
+
+
+=====================
+
+
+# CELL 7: Generate Synthetic Data - Fixed Numerical Reconstruction
+
+import numpy as np
+import pandas as pd
+
+print("🔍 SYNTHETIC DATA GENERATION - FIXED NUMERICAL RECONSTRUCTION")
+print("=" * 60)
+
+# Generate synthetic data
+num_synthetic = len(original_data)
+print(f"Generating {num_synthetic:,} synthetic samples...")
+
+# Step 1: Generate synthetic features
+synthetic_processed = vae_model.generate(num_synthetic)
+print(f"✅ Generated synthetic features: {synthetic_processed.shape}")
+
+# Initialize result dataframe
+synthetic_data = pd.DataFrame()
+feature_idx = 0
+
+# Step 2: Reconstruct categorical columns
+print(f"\n🔧 RECONSTRUCTING CATEGORICAL COLUMNS:")
+for col in config.CATEGORICAL_COLUMNS:
+    if col in processor.label_encoders:
+        encoder = processor.label_encoders[col]
+        n_classes = len(encoder.classes_)
+        
+        print(f"  Processing {col} ({n_classes} classes)...")
+        
+        # Extract one-hot features
+        one_hot_features = synthetic_processed[:, feature_idx:feature_idx + n_classes]
+        
+        # Add small noise for diversity
+        noise = np.random.normal(0, 0.05, one_hot_features.shape)
+        one_hot_features_noisy = one_hot_features + noise
+        
+        # Use temperature sampling for diversity
+        temperature = 1.5
+        probabilities = np.exp(one_hot_features_noisy / temperature)
+        probabilities = probabilities / np.sum(probabilities, axis=1, keepdims=True)
+        
+        # Sample from probability distribution
+        categorical_indices = np.array([
+            np.random.choice(n_classes, p=prob) 
+            for prob in probabilities
+        ])
+        
+        # Decode to original values
+        decoded_values = encoder.inverse_transform(categorical_indices)
+        synthetic_data[col] = decoded_values
+        
+        unique_count = len(np.unique(decoded_values))
+        print(f"    ✅ {col}: {unique_count} unique values")
+        
+        feature_idx += n_classes
+
+# Step 3: Reconstruct numerical columns with PROPER SCALING
+print(f"\n🔧 RECONSTRUCTING NUMERICAL COLUMNS:")
+numerical_features = synthetic_processed[:, feature_idx:]
+print(f"  Numerical features shape: {numerical_features.shape}")
+
+# Get original statistics for proper scaling
+orig_stats = {}
+for col in config.NUMERICAL_COLUMNS:
+    orig_stats[col] = {
+        'mean': original_data[col].mean(),
+        'std': original_data[col].std(),
+        'min': original_data[col].min(),
+        'max': original_data[col].max(),
+        'median': original_data[col].median()
+    }
+
+# Reconstruct each numerical column properly
+if hasattr(processor, 'numerical_scaler') and processor.numerical_scaler is not None:
+    # Use the fitted scaler
+    numerical_decoded = processor.numerical_scaler.inverse_transform(numerical_features)
+    
+    for i, col in enumerate(config.NUMERICAL_COLUMNS):
+        if i < numerical_decoded.shape[1]:
+            # Get the inverse transformed values
+            base_values = numerical_decoded[:, i]
+            
+            # Add controlled variation to match original distribution
+            orig_std = orig_stats[col]['std']
+            variation = np.random.normal(0, orig_std * 0.1, len(base_values))
+            final_values = base_values + variation
+            
+            # Ensure values are in reasonable range
+            if col == 'ed_amount':
+                final_values = np.clip(final_values, 0.01, 1000000.0)
+                # Ensure some similarity to original distribution
+                orig_range = orig_stats[col]['max'] - orig_stats[col]['min']
+                final_values = (final_values - final_values.min()) / (final_values.max() - final_values.min()) * orig_range + orig_stats[col]['min']
+            elif col == 'fh_file_creation_date':
+                final_values = np.clip(final_values.astype(int), 250000, 260000)
+            elif col == 'fh_file_creation_time':
+                final_values = np.clip(final_values.astype(int), 0, 2359)
+            
+            synthetic_data[col] = final_values
+            print(f"    ✅ {col}: range [{final_values.min():.2f}, {final_values.max():.2f}]")
+            print(f"       Original range: [{orig_stats[col]['min']:.2f}, {orig_stats[col]['max']:.2f}]")
+
+else:
+    # Manual reconstruction if no scaler
+    print("  Using manual reconstruction...")
+    for i, col in enumerate(config.NUMERICAL_COLUMNS):
+        if i < numerical_features.shape[1]:
+            feature_col = numerical_features[:, i]
+            
+            # Scale to original data range
+            orig_min = orig_stats[col]['min']
+            orig_max = orig_stats[col]['max']
+            orig_mean = orig_stats[col]['mean']
+            orig_std = orig_stats[col]['std']
+            
+            # Scale from [0,1] to original range
+            scaled_values = feature_col * (orig_max - orig_min) + orig_min
+            
+            # Add noise based on original standard deviation
+            noise = np.random.normal(0, orig_std * 0.1, len(scaled_values))
+            final_values = scaled_values + noise
+            
+            # Apply constraints
+            if col == 'ed_amount':
+                final_values = np.clip(final_values, 0.01, 1000000.0)
+            elif col == 'fh_file_creation_date':
+                final_values = np.clip(final_values.astype(int), 250000, 260000)
+            elif col == 'fh_file_creation_time':
+                final_values = np.clip(final_values.astype(int), 0, 2359)
+            
+            synthetic_data[col] = final_values
+            print(f"    ✅ {col}: range [{final_values.min():.2f}, {final_values.max():.2f}]")
+
+# Step 4: Final validation
+print(f"\n✅ FINAL SYNTHETIC DATA:")
+print(f"   Shape: {synthetic_data.shape}")
+print(f"   Columns: {list(synthetic_data.columns)}")
+
+# Check for duplicate rows
+duplicate_rows = synthetic_data.duplicated().sum()
+print(f"\n🔍 UNIQUENESS CHECK:")
+print(f"   Duplicate rows: {duplicate_rows} out of {len(synthetic_data)}")
+print(f"   Unique rows: {len(synthetic_data) - duplicate_rows}")
+
+# Compare distributions
+print(f"\n📊 DISTRIBUTION COMPARISON:")
+for col in config.NUMERICAL_COLUMNS:
+    if col in synthetic_data.columns and col in original_data.columns:
+        orig_mean = original_data[col].mean()
+        synth_mean = synthetic_data[col].mean()
+        diff_pct = ((synth_mean - orig_mean) / orig_mean * 100)
+        print(f"   {col} mean: Original {orig_mean:.2f} vs Synthetic {synth_mean:.2f} ({diff_pct:+.1f}%)")
+
+# Display sample
+print(f"\n📋 Sample synthetic data:")
+display(synthetic_data.head(10))
+
+print(f"\n🎉 Synthetic data generation completed!")
