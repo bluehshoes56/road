@@ -1,5 +1,1 @@
 #t
-df['ed_amount'] = pd.to_numeric(df['ed_amount'], errors='coerce')
-df['fh_file_creation_date'] = pd.to_numeric(df['fh_file_creation_date'], errors='coerce')
-df['fh_file_creation_time'] = pd.to_numeric(df['fh_file_creation_time'], errors='coerce')  # ADD THIS LINE
-df = df.dropna(subset=['ed_amount', 'fh_file_creation_date', 'fh_file_creation_time'])  # Update this line
