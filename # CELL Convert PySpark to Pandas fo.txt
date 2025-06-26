@@ -1,26 +1,191 @@
-#t
-EXACT CHANGES NEEDED:
+# =============================================================================
+# CELL 9: CTO BUSINESS RELATIONSHIP ANALYSIS (FIXED)
+# Payer-Payee matrices showing Real vs Synthetic preservation
+# Critical for client data sales validation
+# =============================================================================
 
-Cell 1, Line 9:
+def generate_cto_relationship_matrices(real_data, synthetic_data, top_n_payers=10):
+    """Generate comprehensive payer-payee relationship matrices for CTO review"""
+    
+    print(f"\n🎯 CTO BUSINESS RELATIONSHIP ANALYSIS")
+    print(f"Analyzing top {top_n_payers} payers by transaction volume")
+    print(f"Real data: {len(real_data):,} transactions")
+    print(f"Synthetic data: {len(synthetic_data):,} transactions")
+    
+    # Get top payers from real data
+    top_payers = real_data.groupby('payer_Company_Name')['ed_amount'].sum().nlargest(top_n_payers).index.tolist()
+    print(f"\n📊 Top {len(top_payers)} Payers Selected:")
+    for i, payer in enumerate(top_payers, 1):
+        total_amount = real_data[real_data['payer_Company_Name'] == payer]['ed_amount'].sum()
+        txn_count = len(real_data[real_data['payer_Company_Name'] == payer])
+        print(f"  {i}. {payer}: ${total_amount:,.0f} ({txn_count:,} transactions)")
+    
+    # Filter data for top payers only
+    real_filtered = real_data[real_data['payer_Company_Name'].isin(top_payers)].copy()
+    synthetic_filtered = synthetic_data[synthetic_data['payer_Company_Name'].isin(top_payers)].copy()
+    
+    print(f"\n📋 Filtered Data for Analysis:")
+    print(f"  Real transactions (top payers): {len(real_filtered):,}")
+    print(f"  Synthetic transactions (top payers): {len(synthetic_filtered):,}")
+    
+    # Get all payees that interact with top payers
+    all_payees = sorted(set(real_filtered['payee_Company_Name'].unique()) | 
+                       set(synthetic_filtered['payee_Company_Name'].unique()))
+    print(f"  Total unique payees: {len(all_payees)}")
+    
+    # Create relationship matrices
+    matrices = {}
+    
+    # 1. TRANSACTION COUNT MATRIX
+    print(f"\n📊 MATRIX 1: TRANSACTION COUNTS")
+    real_count_matrix = real_filtered.groupby(['payer_Company_Name', 'payee_Company_Name']).size().unstack(fill_value=0)
+    synthetic_count_matrix = synthetic_filtered.groupby(['payer_Company_Name', 'payee_Company_Name']).size().unstack(fill_value=0)
+    
+    # Align matrices to same columns
+    all_payees_in_data = sorted(set(real_count_matrix.columns) | set(synthetic_count_matrix.columns))
+    real_count_matrix = real_count_matrix.reindex(columns=all_payees_in_data, fill_value=0)
+    synthetic_count_matrix = synthetic_count_matrix.reindex(columns=all_payees_in_data, fill_value=0)
+    
+    print(f"\nReal Data - Transaction Counts (Top 5 Payees):")
+    display(real_count_matrix.iloc[:, :5])
+    
+    print(f"\nSynthetic Data - Transaction Counts (Top 5 Payees):")
+    display(synthetic_count_matrix.iloc[:, :5])
+    
+    # Count difference analysis
+    count_diff = ((synthetic_count_matrix - real_count_matrix) / (real_count_matrix + 1e-6) * 100).round(1)
+    print(f"\nTransaction Count Differences (% change, Top 5 Payees):")
+    display(count_diff.iloc[:, :5])
+    
+    matrices['real_counts'] = real_count_matrix
+    matrices['synthetic_counts'] = synthetic_count_matrix
+    matrices['count_differences'] = count_diff
+    
+    # 2. AMOUNT MATRIX
+    print(f"\n💰 MATRIX 2: TOTAL AMOUNTS")
+    real_amount_matrix = real_filtered.groupby(['payer_Company_Name', 'payee_Company_Name'])['ed_amount'].sum().unstack(fill_value=0)
+    synthetic_amount_matrix = synthetic_filtered.groupby(['payer_Company_Name', 'payee_Company_Name'])['ed_amount'].sum().unstack(fill_value=0)
+    
+    # Align matrices
+    real_amount_matrix = real_amount_matrix.reindex(columns=all_payees_in_data, fill_value=0)
+    synthetic_amount_matrix = synthetic_amount_matrix.reindex(columns=all_payees_in_data, fill_value=0)
+    
+    print(f"\nReal Data - Total Amounts (Top 5 Payees, $K):")
+    display((real_amount_matrix.iloc[:, :5] / 1000).round(1))
+    
+    print(f"\nSynthetic Data - Total Amounts (Top 5 Payees, $K):")
+    display((synthetic_amount_matrix.iloc[:, :5] / 1000).round(1))
+    
+    # Amount difference analysis
+    amount_diff = ((synthetic_amount_matrix - real_amount_matrix) / (real_amount_matrix + 1e-6) * 100).round(1)
+    print(f"\nTotal Amount Differences (% change, Top 5 Payees):")
+    display(amount_diff.iloc[:, :5])
+    
+    matrices['real_amounts'] = real_amount_matrix
+    matrices['synthetic_amounts'] = synthetic_amount_matrix
+    matrices['amount_differences'] = amount_diff
+    
+    # 3. AVERAGE AMOUNT MATRIX
+    print(f"\n📈 MATRIX 3: AVERAGE AMOUNTS PER TRANSACTION")
+    real_avg_matrix = real_filtered.groupby(['payer_Company_Name', 'payee_Company_Name'])['ed_amount'].mean().unstack(fill_value=0)
+    synthetic_avg_matrix = synthetic_filtered.groupby(['payer_Company_Name', 'payee_Company_Name'])['ed_amount'].mean().unstack(fill_value=0)
+    
+    # Align matrices
+    real_avg_matrix = real_avg_matrix.reindex(columns=all_payees_in_data, fill_value=0)
+    synthetic_avg_matrix = synthetic_avg_matrix.reindex(columns=all_payees_in_data, fill_value=0)
+    
+    print(f"\nReal Data - Average Amounts (Top 5 Payees, $K):")
+    display((real_avg_matrix.iloc[:, :5] / 1000).round(2))
+    
+    print(f"\nSynthetic Data - Average Amounts (Top 5 Payees, $K):")
+    display((synthetic_avg_matrix.iloc[:, :5] / 1000).round(2))
+    
+    # Average difference analysis
+    avg_diff = ((synthetic_avg_matrix - real_avg_matrix) / (real_avg_matrix + 1e-6) * 100).round(1)
+    print(f"\nAverage Amount Differences (% change, Top 5 Payees):")
+    display(avg_diff.iloc[:, :5])
+    
+    matrices['real_averages'] = real_avg_matrix
+    matrices['synthetic_averages'] = synthetic_avg_matrix
+    matrices['average_differences'] = avg_diff
+    
+    # 4. RELATIONSHIP PRESERVATION SUMMARY
+    print(f"\n🎯 RELATIONSHIP PRESERVATION SUMMARY")
+    
+    # Calculate preservation metrics
+    total_real_relationships = (real_count_matrix > 0).sum().sum()
+    total_synthetic_relationships = (synthetic_count_matrix > 0).sum().sum()
+    preserved_relationships = ((real_count_matrix > 0) & (synthetic_count_matrix > 0)).sum().sum()
+    
+    relationship_preservation = (preserved_relationships / total_real_relationships * 100) if total_real_relationships > 0 else 0
+    
+    # Amount correlation
+    real_amounts_flat = real_amount_matrix.values.flatten()
+    synthetic_amounts_flat = synthetic_amount_matrix.values.flatten()
+    amount_correlation = np.corrcoef(real_amounts_flat, synthetic_amounts_flat)[0, 1] if len(real_amounts_flat) > 1 else 0
+    
+    # Count correlation  
+    real_counts_flat = real_count_matrix.values.flatten()
+    synthetic_counts_flat = synthetic_count_matrix.values.flatten()
+    count_correlation = np.corrcoef(real_counts_flat, synthetic_counts_flat)[0, 1] if len(real_counts_flat) > 1 else 0
+    
+    print(f"📊 Key Metrics for CTO:")
+    print(f"  Relationship Preservation: {relationship_preservation:.1f}%")
+    print(f"  Amount Pattern Correlation: {amount_correlation:.3f}")
+    print(f"  Transaction Pattern Correlation: {count_correlation:.3f}")
+    print(f"  Real Relationships: {total_real_relationships:,}")
+    print(f"  Synthetic Relationships: {total_synthetic_relationships:,}")
+    print(f"  Preserved Relationships: {preserved_relationships:,}")
+    
+    # Strategic tier analysis (if available)
+    if 'tier' in real_filtered.columns:
+        print(f"\n⭐ STRATEGIC TIER PRESERVATION:")
+        for tier in [1, 2, 3]:
+            tier_data = real_filtered[real_filtered['tier'] == tier]
+            if len(tier_data) > 0:
+                tier_amount = tier_data['ed_amount'].sum()
+                tier_txns = len(tier_data)
+                tier_weight = {1: "5X", 2: "2X", 3: "1X"}[tier]
+                print(f"  Tier {tier} ({tier_weight}): ${tier_amount:,.0f} ({tier_txns:,} transactions)")
+    
+    # Business impact assessment
+    print(f"\n💼 BUSINESS IMPACT ASSESSMENT:")
+    if relationship_preservation >= 80:
+        print(f"  ✅ EXCELLENT: Strategic relationships well preserved")
+    elif relationship_preservation >= 60:
+        print(f"  ⚠️ GOOD: Most relationships preserved, minor gaps")
+    else:
+        print(f"  ❌ NEEDS IMPROVEMENT: Significant relationship loss")
+    
+    if amount_correlation >= 0.8:
+        print(f"  ✅ EXCELLENT: Amount patterns strongly preserved")
+    elif amount_correlation >= 0.6:
+        print(f"  ⚠️ GOOD: Amount patterns moderately preserved")
+    else:
+        print(f"  ❌ NEEDS IMPROVEMENT: Amount patterns poorly preserved")
+    
+    return matrices
 
-# CHANGE THIS LINE:
-TARGET_TRAINING_ROWS = 10000
-# TO THIS:
-TARGET_TRAINING_ROWS = 25000
-Cell 7, Line ~15 (inside generate_conditional_synthetic_data_fixed function):
-
-# CHANGE THIS LINE:
-synthetic_batch = synthesizer.sample(num_rows=samples_per_condition)
-# TO THIS:
-condition_df = pd.DataFrame({conditional_column: [condition] * samples_per_condition})
-synthetic_batch = synthesizer.sample(num_rows=samples_per_condition, conditions=condition_df)
-Cell 7, Line ~20 (remove this line completely):
-
-# DELETE THIS LINE:
-synthetic_batch[conditional_column] = condition
-That's it. Just these 3 changes:
-
-Cell 1: Increase training rows to 25,000
-Cell 7: Fix conditional generation with proper DataFrame format
-Cell 7: Remove the manual condition assignment
-These changes will give you proper conditional generation with 2.5x more training data for better diversity.
+# Execute CTO relationship analysis
+try:
+    if 'training_data_weighted' in globals() and 'synthetic_data' in globals():
+        relationship_matrices = generate_cto_relationship_matrices(
+            training_data_weighted, 
+            synthetic_data, 
+            top_n_payers=10
+        )
+        
+        print(f"\n✅ CTO BUSINESS RELATIONSHIP ANALYSIS COMPLETE")
+        print(f"Matrices generated for top 10 payers showing:")
+        print(f"  - Transaction count preservation")
+        print(f"  - Amount flow preservation") 
+        print(f"  - Average transaction size preservation")
+        print(f"  - Strategic relationship validation")
+        
+    else:
+        print(f"❌ Required data not available for CTO analysis")
+        print(f"Available variables: {[var for var in globals().keys() if not var.startswith('_')]}")
+        
+except Exception as e:
+    print(f"❌ CTO relationship analysis failed: {e}")
+    raise
