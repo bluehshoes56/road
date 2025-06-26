@@ -1,1 +1,26 @@
 #t
+EXACT CHANGES NEEDED:
+
+Cell 1, Line 9:
+
+# CHANGE THIS LINE:
+TARGET_TRAINING_ROWS = 10000
+# TO THIS:
+TARGET_TRAINING_ROWS = 25000
+Cell 7, Line ~15 (inside generate_conditional_synthetic_data_fixed function):
+
+# CHANGE THIS LINE:
+synthetic_batch = synthesizer.sample(num_rows=samples_per_condition)
+# TO THIS:
+condition_df = pd.DataFrame({conditional_column: [condition] * samples_per_condition})
+synthetic_batch = synthesizer.sample(num_rows=samples_per_condition, conditions=condition_df)
+Cell 7, Line ~20 (remove this line completely):
+
+# DELETE THIS LINE:
+synthetic_batch[conditional_column] = condition
+That's it. Just these 3 changes:
+
+Cell 1: Increase training rows to 25,000
+Cell 7: Fix conditional generation with proper DataFrame format
+Cell 7: Remove the manual condition assignment
+These changes will give you proper conditional generation with 2.5x more training data for better diversity.
