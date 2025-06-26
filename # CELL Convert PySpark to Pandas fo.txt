@@ -1,1 +1,129 @@
-#t
+# =============================================================================
+# CELL 7: Conditional Synthetic Data Generation (FIXED)
+# Day-by-day synthetic data generation with proper TVAE API
+# =============================================================================
+
+def generate_conditional_synthetic_data_fixed(synthesizer, training_data, conditional_column, samples_per_condition):
+    """Generate conditional synthetic data with fixed TVAE API calls"""
+    
+    if synthesizer is None:
+        raise ValueError("Synthesizer model is required")
+    
+    print(f"\n🎲 CONDITIONAL SYNTHETIC DATA GENERATION")
+    print(f"Model: {type(synthesizer).__name__}")
+    print(f"Conditional Column: {conditional_column}")
+    print(f"Samples per condition: {samples_per_condition}")
+    
+    # Get unique conditions from training data
+    unique_conditions = sorted(training_data[conditional_column].unique())
+    print(f"\n📋 Generation Plan:")
+    print(f"  Conditions: {len(unique_conditions)}")
+    print(f"  Total synthetic samples: {len(unique_conditions) * samples_per_condition:,}")
+    
+    # Show original distribution
+    condition_dist = training_data[conditional_column].value_counts().sort_index()
+    print(f"\n📊 Original Distribution (Top 10):")
+    for condition, count in condition_dist.head(10).items():
+        pct = (count / len(training_data)) * 100
+        synthetic_target = samples_per_condition
+        print(f"  {condition}: {count:,} original ({pct:.1f}%) → {synthetic_target} synthetic")
+    
+    # Generate synthetic data for each condition
+    print(f"\n🎯 Generating synthetic data...")
+    synthetic_datasets = []
+    generation_stats = []
+    
+    for i, condition in enumerate(unique_conditions):
+        try:
+            print(f"  Generating for {condition}...", end="")
+            start_time = datetime.now()
+            
+            # FIXED: Use proper TVAE API - simple sample() call
+            # The model already learned the conditional patterns during training
+            synthetic_batch = synthesizer.sample(num_rows=samples_per_condition)
+            
+            # Add the condition flag to match the original structure
+            synthetic_batch[conditional_column] = condition
+            
+            generation_time = datetime.now() - start_time
+            
+            # Validate generation
+            if len(synthetic_batch) == 0:
+                print(f" ❌ No data generated")
+                continue
+                
+            print(f" ✓ {len(synthetic_batch):,} rows ({generation_time.total_seconds():.1f}s)")
+            
+            synthetic_datasets.append(synthetic_batch)
+            
+            # Track statistics
+            generation_stats.append({
+                'condition': condition,
+                'synthetic_rows': len(synthetic_batch),
+                'unique_payers': synthetic_batch['payer_Company_Name'].nunique(),
+                'unique_payees': synthetic_batch['payee_Company_Name'].nunique(),
+                'total_amount': synthetic_batch['ed_amount'].sum(),
+                'avg_amount': synthetic_batch['ed_amount'].mean(),
+                'min_amount': synthetic_batch['ed_amount'].min(),
+                'max_amount': synthetic_batch['ed_amount'].max(),
+                'null_count': synthetic_batch.isnull().sum().sum(),
+                'negative_amounts': (synthetic_batch['ed_amount'] < 0).sum(),
+                'generation_time_seconds': generation_time.total_seconds()
+            })
+            
+        except Exception as e:
+            print(f" ❌ Error for {condition}: {e}")
+            continue
+    
+    if not synthetic_datasets:
+        raise ValueError("No synthetic data generated")
+    
+    # Combine all synthetic data
+    combined_synthetic = pd.concat(synthetic_datasets, ignore_index=True)
+    
+    print(f"\n✅ SYNTHETIC GENERATION SUCCESS")
+    print(f"Total synthetic data: {len(combined_synthetic):,} rows")
+    print(f"Conditions generated: {combined_synthetic[conditional_column].nunique()}")
+    print(f"Unique synthetic payers: {combined_synthetic['payer_Company_Name'].nunique()}")
+    print(f"Unique synthetic payees: {combined_synthetic['payee_Company_Name'].nunique()}")
+    print(f"Total generation time: {sum([s['generation_time_seconds'] for s in generation_stats]):.1f} seconds")
+    
+    # Quality assessment
+    total_nulls = combined_synthetic.isnull().sum().sum()
+    total_negatives = (combined_synthetic['ed_amount'] < 0).sum()
+    data_completeness = ((len(combined_synthetic) * len(combined_synthetic.columns)) - total_nulls) / (len(combined_synthetic) * len(combined_synthetic.columns)) * 100
+    
+    print(f"\n🔍 Quality Assessment:")
+    print(f"  Null values: {total_nulls:,}")
+    print(f"  Negative amounts: {total_negatives:,}")
+    print(f"  Data completeness: {data_completeness:.1f}%")
+    
+    generation_stats_df = pd.DataFrame(generation_stats)
+    
+    return combined_synthetic, generation_stats_df
+
+# Generate conditional synthetic data
+try:
+    synthetic_data, generation_stats = generate_conditional_synthetic_data_fixed(
+        ctvae_model,
+        training_data_weighted,
+        CONDITIONAL_COLUMN,
+        SAMPLES_PER_CONDITION
+    )
+    
+    print(f"\n🎉 SYNTHETIC DATA READY")
+    print(f"Generated: {len(synthetic_data):,} synthetic transactions")
+    print(f"Ready for quality validation and analysis")
+    
+    # Show sample
+    print(f"\n📋 Sample Synthetic Data:")
+    display(synthetic_data.head())
+    
+    # Show generation statistics summary
+    print(f"\n📊 Generation Statistics Summary:")
+    summary_stats = generation_stats.describe()
+    display(summary_stats[['synthetic_rows', 'unique_payers', 'unique_payees', 'total_amount', 'generation_time_seconds']])
+    
+except Exception as e:
+    print(f"❌ Synthetic generation failed: {e}")
+    raise
