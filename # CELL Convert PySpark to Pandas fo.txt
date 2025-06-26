@@ -1,1 +1,28 @@
-#t
+QUICK FIX FOR CELL 9 ERROR:
+
+The error is a dimension mismatch in the matrix concatenation.
+
+Replace lines 115-117 in Cell 9 with:
+
+# Calculate preservation metrics - FIXED
+total_real_relationships = (real_count_matrix > 0).sum().sum()
+total_synthetic_relationships = (synthetic_count_matrix > 0).sum().sum()
+# Ensure matrices have same shape for comparison
+common_index = real_count_matrix.index.intersection(synthetic_count_matrix.index)
+common_columns = real_count_matrix.columns.intersection(synthetic_count_matrix.columns)
+real_aligned = real_count_matrix.loc[common_index, common_columns]
+synthetic_aligned = synthetic_count_matrix.loc[common_index, common_columns]
+preserved_relationships = ((real_aligned > 0) & (synthetic_aligned > 0)).sum().sum()
+And replace lines 122-129 with:
+
+# Amount correlation - FIXED
+real_amounts_aligned = real_amount_matrix.loc[common_index, common_columns]
+synthetic_amounts_aligned = synthetic_amount_matrix.loc[common_index, common_columns]
+real_amounts_flat = real_amounts_aligned.values.flatten()
+synthetic_amounts_flat = synthetic_amounts_aligned.values.flatten()
+amount_correlation = np.corrcoef(real_amounts_flat, synthetic_amounts_flat)[0, 1] if len(real_amounts_flat) > 1 else 0
+# Count correlation - FIXED  
+real_counts_flat = real_aligned.values.flatten()
+synthetic_counts_flat = synthetic_aligned.values.flatten()
+count_correlation = np.corrcoef(real_counts_flat, synthetic_counts_flat)[0, 1] if len(real_counts_flat) > 1 else 0
+This fixes the matrix dimension mismatch causing the concatenation error.
