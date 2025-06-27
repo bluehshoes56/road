@@ -1,1 +1,179 @@
-#t
+# =============================================================================
+# CELL 9: CTO PAYER-PAYEE CROSS-TABULATION ANALYSIS (DAY-FLEXIBLE)
+# Company-level matrices showing Real vs Synthetic preservation by day
+# =============================================================================
+
+# CONFIGURATION PARAMETER - Change this to filter by specific day
+ANALYSIS_DAY = "all_days"  # Options: "all_days", "day_1", "day_2", "day_3", "day_4", etc.
+
+# Create copies to avoid modifying original data
+real_data = training_data_weighted.copy()
+synth_data = synthetic_data.copy()
+
+# Fix numeric conversion
+real_data['ed_amount'] = pd.to_numeric(real_data['ed_amount'], errors='coerce')
+real_data['ed_amount'] = real_data['ed_amount'].fillna(0)
+
+synth_data['ed_amount'] = pd.to_numeric(synth_data['ed_amount'], errors='coerce')
+synth_data['ed_amount'] = synth_data['ed_amount'].fillna(0)
+
+print("🏢 PAYER-PAYEE CROSS-TABULATION ANALYSIS")
+print("=" * 50)
+
+# Day filtering logic
+if ANALYSIS_DAY != "all_days":
+    # Extract day number from parameter (e.g., "day_1" -> 1)
+    day_num = int(ANALYSIS_DAY.split("_")[1])
+    
+    # Get unique dates and select specific day
+    unique_dates = sorted(real_data['fh_file_creation_date'].unique())
+    if day_num <= len(unique_dates):
+        selected_date = unique_dates[day_num - 1]
+        real_data = real_data[real_data['fh_file_creation_date'] == selected_date].copy()
+        synth_data = synth_data[synth_data['fh_file_creation_date'] == selected_date].copy()
+        print(f"📅 Analysis for DAY {day_num} (Date: {selected_date})")
+    else:
+        print(f"⚠️ Day {day_num} not available. Using all days.")
+        ANALYSIS_DAY = "all_days"
+else:
+    print(f"📅 Analysis for ALL DAYS")
+
+print(f"Configuration: {ANALYSIS_DAY}")
+
+# Get top 10 payers by transaction volume
+top_payers = real_data.groupby('payer_Company_Name')['ed_amount'].sum().nlargest(10).index.tolist()
+print(f"\n📊 Top 10 Payers Selected ({ANALYSIS_DAY}):")
+for i, payer in enumerate(top_payers, 1):
+    total_amount = real_data[real_data['payer_Company_Name'] == payer]['ed_amount'].sum()
+    txn_count = len(real_data[real_data['payer_Company_Name'] == payer])
+    print(f"  {i}. {payer}: ${total_amount:,.0f} ({txn_count:,} transactions)")
+
+# Filter data for top payers only
+real_filtered = real_data[real_data['payer_Company_Name'].isin(top_payers)].copy()
+synth_filtered = synth_data[synth_data['payer_Company_Name'].isin(top_payers)].copy()
+
+print(f"\nFiltered Data ({ANALYSIS_DAY}): Real {len(real_filtered):,} | Synthetic {len(synth_filtered):,} transactions")
+
+# =============================================
+# REAL DATA - PAYER vs PAYEE CROSS-TABULATION
+# =============================================
+print(f"\n🏢 REAL DATA - PAYER vs PAYEE COMPANIES ({ANALYSIS_DAY}):")
+
+# 1. Count cross-tabulation
+real_count_crosstab = pd.crosstab(
+    real_filtered['payer_Company_Name'],
+    real_filtered['payee_Company_Name'],
+    margins=True,
+    margins_name='Total'
+)
+print(f"\n📊 TRANSACTION COUNT CROSS-TABULATION (Real - {ANALYSIS_DAY}):")
+display(real_count_crosstab.iloc[:10, :10])  # Show top 10x10
+
+# 2. Amount cross-tabulation
+real_amount_crosstab = pd.crosstab(
+    real_filtered['payer_Company_Name'],
+    real_filtered['payee_Company_Name'],
+    values=real_filtered['ed_amount'],
+    aggfunc='sum',
+    margins=True,
+    margins_name='Total'
+).round(0)
+print(f"\n💰 TOTAL AMOUNT CROSS-TABULATION (Real - {ANALYSIS_DAY}, $K):")
+display((real_amount_crosstab.iloc[:10, :10] / 1000).round(1))
+
+# 3. Average amount per transaction cross-tabulation
+real_avg_crosstab = pd.crosstab(
+    real_filtered['payer_Company_Name'],
+    real_filtered['payee_Company_Name'],
+    values=real_filtered['ed_amount'],
+    aggfunc='mean',
+    margins=True,
+    margins_name='Total'
+).round(0)
+print(f"\n📊 AVERAGE AMOUNT PER TRANSACTION CROSS-TABULATION (Real - {ANALYSIS_DAY}, $K):")
+display((real_avg_crosstab.iloc[:10, :10] / 1000).round(2))
+
+# =============================================
+# SYNTHETIC DATA - PAYER vs PAYEE CROSS-TABULATION
+# =============================================
+print(f"\n🤖 SYNTHETIC DATA - PAYER vs PAYEE COMPANIES ({ANALYSIS_DAY}):")
+
+# 1. Count cross-tabulation
+synth_count_crosstab = pd.crosstab(
+    synth_filtered['payer_Company_Name'],
+    synth_filtered['payee_Company_Name'],
+    margins=True,
+    margins_name='Total'
+)
+print(f"\n📊 TRANSACTION COUNT CROSS-TABULATION (Synthetic - {ANALYSIS_DAY}):")
+display(synth_count_crosstab.iloc[:10, :10])
+
+# 2. Amount cross-tabulation
+synth_amount_crosstab = pd.crosstab(
+    synth_filtered['payer_Company_Name'],
+    synth_filtered['payee_Company_Name'],
+    values=synth_filtered['ed_amount'],
+    aggfunc='sum',
+    margins=True,
+    margins_name='Total'
+).round(0)
+print(f"\n💰 TOTAL AMOUNT CROSS-TABULATION (Synthetic - {ANALYSIS_DAY}, $K):")
+display((synth_amount_crosstab.iloc[:10, :10] / 1000).round(1))
+
+# 3. Average amount per transaction cross-tabulation
+synth_avg_crosstab = pd.crosstab(
+    synth_filtered['payer_Company_Name'],
+    synth_filtered['payee_Company_Name'],
+    values=synth_filtered['ed_amount'],
+    aggfunc='mean',
+    margins=True,
+    margins_name='Total'
+).round(0)
+print(f"\n📊 AVERAGE AMOUNT PER TRANSACTION CROSS-TABULATION (Synthetic - {ANALYSIS_DAY}, $K):")
+display((synth_avg_crosstab.iloc[:10, :10] / 1000).round(2))
+
+# =============================================
+# DIFFERENCE ANALYSIS
+# =============================================
+print(f"\n📈 REAL vs SYNTHETIC COMPARISON ({ANALYSIS_DAY}):")
+
+# Align matrices for comparison
+common_payers = list(set(real_count_crosstab.index) & set(synth_count_crosstab.index))
+common_payees = list(set(real_count_crosstab.columns) & set(synth_count_crosstab.columns))
+
+if len(common_payers) > 0 and len(common_payees) > 0:
+    real_aligned = real_count_crosstab.loc[common_payers, common_payees]
+    synth_aligned = synth_count_crosstab.loc[common_payers, common_payees]
+    
+    # Calculate percentage differences
+    count_diff = ((synth_aligned - real_aligned) / (real_aligned + 1e-6) * 100).round(1)
+    print(f"\n📊 TRANSACTION COUNT DIFFERENCES (% change - {ANALYSIS_DAY}):")
+    display(count_diff.iloc[:10, :10])
+    
+    # Summary metrics
+    total_real_relationships = (real_aligned > 0).sum().sum()
+    total_synth_relationships = (synth_aligned > 0).sum().sum()
+    preserved_relationships = ((real_aligned > 0) & (synth_aligned > 0)).sum().sum()
+    
+    preservation_rate = (preserved_relationships / total_real_relationships * 100) if total_real_relationships > 0 else 0
+    
+    print(f"\n🎯 CTO SUMMARY ({ANALYSIS_DAY}):")
+    print(f"  Relationship Preservation: {preservation_rate:.1f}%")
+    print(f"  Real Payer-Payee Pairs: {total_real_relationships:,}")
+    print(f"  Synthetic Payer-Payee Pairs: {total_synth_relationships:,}")
+    print(f"  Preserved Pairs: {preserved_relationships:,}")
+    
+    if preservation_rate >= 80:
+        print(f"  ✅ EXCELLENT: Business relationships well preserved")
+    elif preservation_rate >= 60:
+        print(f"  ⚠️ GOOD: Most relationships preserved")
+    else:
+        print(f"  ❌ NEEDS IMPROVEMENT: Significant relationship loss")
+
+print(f"\n✅ PAYER-PAYEE CROSS-TABULATION ANALYSIS COMPLETE ({ANALYSIS_DAY})")
+
+# Instructions for CTO
+print(f"\n📋 USAGE INSTRUCTIONS:")
+print(f"  To analyze specific day: Change ANALYSIS_DAY = 'day_1', 'day_2', 'day_3', etc.")
+print(f"  To analyze all days: Change ANALYSIS_DAY = 'all_days'")
+print(f"  Current setting: {ANALYSIS_DAY}")
