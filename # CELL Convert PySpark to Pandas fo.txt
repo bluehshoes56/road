@@ -1,1 +1,125 @@
-#z
+# =============================================================================
+# CELL 9: CTVAE COMPANY CROSS-TABULATION ANALYSIS (MATCHES VAE FORMAT)
+# Simple clean tables showing payer vs payee company names
+# =============================================================================
+
+# CONFIGURATION PARAMETER - Change this to filter by specific day
+ANALYSIS_DAY = "all_days"  # Options: "all_days", "day_1", "day_2", "day_3", "day_4", etc.
+
+# Create copies to avoid modifying original data
+real_data = training_data_weighted.copy()
+synth_data = synthetic_data.copy()
+
+# Fix numeric conversion
+real_data['ed_amount'] = pd.to_numeric(real_data['ed_amount'], errors='coerce')
+real_data['ed_amount'] = real_data['ed_amount'].fillna(0)
+
+synth_data['ed_amount'] = pd.to_numeric(synth_data['ed_amount'], errors='coerce')
+synth_data['ed_amount'] = synth_data['ed_amount'].fillna(0)
+
+print("🏢 CTVAE COMPANY CROSS-TABULATION ANALYSIS")
+print("=" * 50)
+
+# Day filtering logic
+if ANALYSIS_DAY != "all_days":
+    day_num = int(ANALYSIS_DAY.split("_")[1])
+    unique_dates = sorted(real_data['fh_file_creation_date'].unique())
+    if day_num <= len(unique_dates):
+        selected_date = unique_dates[day_num - 1]
+        real_data = real_data[real_data['fh_file_creation_date'] == selected_date].copy()
+        synth_data = synth_data[synth_data['fh_file_creation_date'] == selected_date].copy()
+        print(f"📅 Analysis for DAY {day_num} (Date: {selected_date})")
+    else:
+        print(f"⚠️ Day {day_num} not available. Using all days.")
+        ANALYSIS_DAY = "all_days"
+else:
+    print(f"📅 Analysis for ALL DAYS")
+
+print(f"Configuration: {ANALYSIS_DAY}")
+
+# =============================================
+# COMPANY LEVEL CROSS-TABULATION ANALYSIS
+# =============================================
+print(f"\n🏢 COMPANY LEVEL CROSS-TABULATION ANALYSIS")
+print("=" * 50)
+
+# 1. ORIGINAL DATA - PAYER vs PAYEE COMPANIES
+print(f"\n🏢 ORIGINAL DATA - PAYER vs PAYEE COMPANIES:")
+
+# Count cross-tabulation
+orig_company_count_crosstab = pd.crosstab(
+    real_data['payer_Company_Name'],
+    real_data['payee_Company_Name'],
+    margins=True,
+    margins_name='Total'
+)
+print(f"\n📊 TRANSACTION COUNT CROSS-TABULATION (Original):")
+display(orig_company_count_crosstab)
+
+# Amount cross-tabulation
+orig_company_amount_crosstab = pd.crosstab(
+    real_data['payer_Company_Name'],
+    real_data['payee_Company_Name'],
+    values=real_data['ed_amount'],
+    aggfunc='sum',
+    margins=True,
+    margins_name='Total'
+).round(0)
+print(f"\n💰 TOTAL AMOUNT CROSS-TABULATION (Original):")
+display(orig_company_amount_crosstab)
+
+# Average amount per transaction cross-tabulation
+orig_company_avg_crosstab = pd.crosstab(
+    real_data['payer_Company_Name'],
+    real_data['payee_Company_Name'],
+    values=real_data['ed_amount'],
+    aggfunc='mean',
+    margins=True,
+    margins_name='Total'
+).round(0)
+print(f"\n📊 AVERAGE AMOUNT PER TRANSACTION CROSS-TABULATION (Original):")
+display(orig_company_avg_crosstab)
+
+# 2. SYNTHETIC DATA - PAYER vs PAYEE COMPANIES
+print(f"\n🤖 SYNTHETIC DATA - PAYER vs PAYEE COMPANIES:")
+
+# Count cross-tabulation
+synth_company_count_crosstab = pd.crosstab(
+    synth_data['payer_Company_Name'],
+    synth_data['payee_Company_Name'],
+    margins=True,
+    margins_name='Total'
+)
+print(f"\n📊 TRANSACTION COUNT CROSS-TABULATION (Synthetic):")
+display(synth_company_count_crosstab)
+
+# Amount cross-tabulation
+synth_company_amount_crosstab = pd.crosstab(
+    synth_data['payer_Company_Name'],
+    synth_data['payee_Company_Name'],
+    values=synth_data['ed_amount'],
+    aggfunc='sum',
+    margins=True,
+    margins_name='Total'
+).round(0)
+print(f"\n💰 TOTAL AMOUNT CROSS-TABULATION (Synthetic):")
+display(synth_company_amount_crosstab)
+
+# Average amount per transaction cross-tabulation
+synth_company_avg_crosstab = pd.crosstab(
+    synth_data['payer_Company_Name'],
+    synth_data['payee_Company_Name'],
+    values=synth_data['ed_amount'],
+    aggfunc='mean',
+    margins=True,
+    margins_name='Total'
+).round(0)
+print(f"\n📊 AVERAGE AMOUNT PER TRANSACTION CROSS-TABULATION (Synthetic):")
+display(synth_company_avg_crosstab)
+
+print(f"\n✅ CTVAE COMPANY CROSS-TABULATION ANALYSIS COMPLETE ({ANALYSIS_DAY})")
+
+print(f"\n📋 USAGE INSTRUCTIONS:")
+print(f"  To analyze specific day: Change ANALYSIS_DAY = 'day_1', 'day_2', 'day_3', etc.")
+print(f"  To analyze all days: Change ANALYSIS_DAY = 'all_days'")
+print(f"  Current setting: {ANALYSIS_DAY}")
