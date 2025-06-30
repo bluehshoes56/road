@@ -1,5 +1,5 @@
 # =============================================================================
-# CELL 9: CTVAE COMPANY CROSS-TABULATION ANALYSIS (COMPLETE WITH DATABRICKS FIX)
+# CELL 9: CTVAE COMPANY CROSS-TABULATION ANALYSIS (ORGANIZED BY METRIC TYPE)
 # =============================================================================
 
 # CONFIGURATION PARAMETER
@@ -36,23 +36,13 @@ print(f"Real Data: {len(real_data):,} transactions")
 print(f"Synthetic Data: {len(synth_data):,} transactions")
 
 # =============================================
-# 1. ORIGINAL DATA - PAYER vs PAYEE COMPANIES
+# 1. TOTAL AMOUNT CROSS-TABULATION ANALYSIS
 # =============================================
-print("\nORIGINAL DATA - PAYER vs PAYEE COMPANIES:")
+print("\n" + "=" * 60)
+print("TOTAL AMOUNT CROSS-TABULATION ANALYSIS")
+print("=" * 60)
 
-# Count cross-tabulation
-orig_company_count_crosstab = pd.crosstab(
-    real_data['payer_Company_Name'],
-    real_data['payee_Company_Name'],
-    margins=True,
-    margins_name='Total'
-)
-# DATABRICKS FIX: Reset index to show company names as column
-orig_count_display = orig_company_count_crosstab.reset_index()
-print("\nTRANSACTION COUNT CROSS-TABULATION (Original):")
-display(orig_count_display)
-
-# Amount cross-tabulation
+# Original data - Amount cross-tabulation
 orig_company_amount_crosstab = pd.crosstab(
     real_data['payer_Company_Name'],
     real_data['payee_Company_Name'],
@@ -62,39 +52,10 @@ orig_company_amount_crosstab = pd.crosstab(
     margins_name='Total'
 ).round(0)
 orig_amount_display = orig_company_amount_crosstab.reset_index()
-print("\nTOTAL AMOUNT CROSS-TABULATION (Original):")
+print("\nTOTAL AMOUNT CROSS-TABULATION (Real Data):")
 display(orig_amount_display)
 
-# Average amount per transaction cross-tabulation
-orig_company_avg_crosstab = pd.crosstab(
-    real_data['payer_Company_Name'],
-    real_data['payee_Company_Name'],
-    values=real_data['ed_amount'],
-    aggfunc='mean',
-    margins=True,
-    margins_name='Total'
-).round(0)
-orig_avg_display = orig_company_avg_crosstab.reset_index()
-print("\nAVERAGE AMOUNT PER TRANSACTION CROSS-TABULATION (Original):")
-display(orig_avg_display)
-
-# =============================================
-# 2. SYNTHETIC DATA - PAYER vs PAYEE COMPANIES
-# =============================================
-print("\nSYNTHETIC DATA - PAYER vs PAYEE COMPANIES:")
-
-# Count cross-tabulation
-synth_company_count_crosstab = pd.crosstab(
-    synth_data['payer_Company_Name'],
-    synth_data['payee_Company_Name'],
-    margins=True,
-    margins_name='Total'
-)
-synth_count_display = synth_company_count_crosstab.reset_index()
-print("\nTRANSACTION COUNT CROSS-TABULATION (Synthetic):")
-display(synth_count_display)
-
-# Amount cross-tabulation
+# Synthetic data - Amount cross-tabulation
 synth_company_amount_crosstab = pd.crosstab(
     synth_data['payer_Company_Name'],
     synth_data['payee_Company_Name'],
@@ -104,10 +65,59 @@ synth_company_amount_crosstab = pd.crosstab(
     margins_name='Total'
 ).round(0)
 synth_amount_display = synth_company_amount_crosstab.reset_index()
-print("\nTOTAL AMOUNT CROSS-TABULATION (Synthetic):")
+print("\nTOTAL AMOUNT CROSS-TABULATION (Synthetic Data):")
 display(synth_amount_display)
 
-# Average amount per transaction cross-tabulation
+# =============================================
+# 2. TRANSACTION COUNT CROSS-TABULATION ANALYSIS
+# =============================================
+print("\n" + "=" * 60)
+print("TRANSACTION COUNT CROSS-TABULATION ANALYSIS")
+print("=" * 60)
+
+# Original data - Count cross-tabulation
+orig_company_count_crosstab = pd.crosstab(
+    real_data['payer_Company_Name'],
+    real_data['payee_Company_Name'],
+    margins=True,
+    margins_name='Total'
+)
+orig_count_display = orig_company_count_crosstab.reset_index()
+print("\nTRANSACTION COUNT CROSS-TABULATION (Real Data):")
+display(orig_count_display)
+
+# Synthetic data - Count cross-tabulation
+synth_company_count_crosstab = pd.crosstab(
+    synth_data['payer_Company_Name'],
+    synth_data['payee_Company_Name'],
+    margins=True,
+    margins_name='Total'
+)
+synth_count_display = synth_company_count_crosstab.reset_index()
+print("\nTRANSACTION COUNT CROSS-TABULATION (Synthetic Data):")
+display(synth_count_display)
+
+# =============================================
+# 3. AVERAGE AMOUNT CROSS-TABULATION ANALYSIS
+# =============================================
+print("\n" + "=" * 60)
+print("AVERAGE AMOUNT PER TRANSACTION CROSS-TABULATION ANALYSIS")
+print("=" * 60)
+
+# Original data - Average amount cross-tabulation
+orig_company_avg_crosstab = pd.crosstab(
+    real_data['payer_Company_Name'],
+    real_data['payee_Company_Name'],
+    values=real_data['ed_amount'],
+    aggfunc='mean',
+    margins=True,
+    margins_name='Total'
+).round(0)
+orig_avg_display = orig_company_avg_crosstab.reset_index()
+print("\nAVERAGE AMOUNT PER TRANSACTION CROSS-TABULATION (Real Data):")
+display(orig_avg_display)
+
+# Synthetic data - Average amount cross-tabulation
 synth_company_avg_crosstab = pd.crosstab(
     synth_data['payer_Company_Name'],
     synth_data['payee_Company_Name'],
@@ -117,17 +127,20 @@ synth_company_avg_crosstab = pd.crosstab(
     margins_name='Total'
 ).round(0)
 synth_avg_display = synth_company_avg_crosstab.reset_index()
-print("\nAVERAGE AMOUNT PER TRANSACTION CROSS-TABULATION (Synthetic):")
+print("\nAVERAGE AMOUNT PER TRANSACTION CROSS-TABULATION (Synthetic Data):")
 display(synth_avg_display)
 
 # =============================================
 # SUMMARY STATISTICS
 # =============================================
-print("\nCOMPANY CROSS-TABULATION ANALYSIS COMPLETED")
-print("Cross-tabulations generated:")
-print("  - Transaction Count Cross-Tabulation")
-print("  - Total Amount Cross-Tabulation") 
-print("  - Average Amount per Transaction")
+print("\n" + "=" * 60)
+print("CROSS-TABULATION ANALYSIS SUMMARY")
+print("=" * 60)
+
+print("Analysis completed for all metric types:")
+print("  1. Total Amount Cross-Tabulation (Real vs Synthetic)")
+print("  2. Transaction Count Cross-Tabulation (Real vs Synthetic)") 
+print("  3. Average Amount per Transaction (Real vs Synthetic)")
 
 # Quick summary stats
 orig_unique_payers = real_data['payer_Company_Name'].nunique()
@@ -135,17 +148,11 @@ orig_unique_payees = real_data['payee_Company_Name'].nunique()
 synth_unique_payers = synth_data['payer_Company_Name'].nunique()
 synth_unique_payees = synth_data['payee_Company_Name'].nunique()
 
-print(f"\nCOMPANY DIVERSITY SUMMARY:")
-print(f"  Original Data:")
-print(f"    Unique Payer Companies: {orig_unique_payers}")
-print(f"    Unique Payee Companies: {orig_unique_payees}")
-print(f"  Synthetic Data:")
-print(f"    Unique Payer Companies: {synth_unique_payers}")
-print(f"    Unique Payee Companies: {synth_unique_payees}")
+print(f"\nCompany Diversity Summary:")
+print(f"  Real Data: {orig_unique_payers} payers, {orig_unique_payees} payees")
+print(f"  Synthetic Data: {synth_unique_payers} payers, {synth_unique_payees} payees")
 
-print(f"\nUSAGE INSTRUCTIONS:")
-print(f"  To analyze specific day: Change ANALYSIS_DAY = 'day_1', 'day_2', 'day_3', etc.")
-print(f"  To analyze all days: Change ANALYSIS_DAY = 'all_days'")
-print(f"  Current setting: {ANALYSIS_DAY}")
+print(f"\nConfiguration: {ANALYSIS_DAY}")
+print("To change analysis period: Modify ANALYSIS_DAY parameter")
 
-print(f"\nCOMPANY CROSS-TABULATION ANALYSIS COMPLETE")
+print("\nCOMPANY CROSS-TABULATION ANALYSIS COMPLETE")
