@@ -1,1 +1,6 @@
-#t
+# Check if inverse transformation worked
+print("Checking data types after CTVAE generation:")
+print(f"Real company names type: {type(training_data_weighted['payer_Company_Name'].iloc[0])}")
+print(f"Synthetic company names type: {type(synthetic_data['payer_Company_Name'].iloc[0])}")
+print(f"Real company sample: {training_data_weighted['payer_Company_Name'].iloc[0]}")
+print(f"Synthetic company sample: {synthetic_data['payer_Company_Name'].iloc[0]}")
