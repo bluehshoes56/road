@@ -44,12 +44,12 @@ def train_production_ctvae(df, conditional_column, epochs, compress_dims, decomp
     print(f"\n📋 Training Features: {len(feature_columns)} columns")
     print(f"  Excluded metadata: {exclude_columns}")
     
-    # Create metadata for CTVAE
-    print(f"\n🔧 Creating CTVAE metadata...")
+    # Create metadata for CTVAE with explicit ed_amount constraints
+    print(f"\n🔧 Creating CTVAE metadata with amount constraints...")
     metadata = SingleTableMetadata()
     metadata.detect_from_dataframe(training_features)
     
-    # Configure data types
+    # Configure data types and constraints
     categorical_columns = [
         'payer_Company_Name', 'payee_Company_Name', 'payer_industry', 'payee_industry',
         'payer_GICS', 'payee_GICS', 'payer_subindustry', 'payee_subindustry', 'day_flag'
@@ -57,31 +57,38 @@ def train_production_ctvae(df, conditional_column, epochs, compress_dims, decomp
     
     numerical_columns = ['ed_amount', 'fh_file_creation_date', 'fh_file_creation_time']
     
-    # Update metadata with constraints
+    # Update metadata
     for col in categorical_columns:
         if col in training_features.columns:
             metadata.update_column(col, sdtype='categorical')
     
-    # FIXED: Add explicit constraints for numerical columns, especially ed_amount
+    # FIXED: Correct SDV constraint syntax for numerical columns
     for col in numerical_columns:
         if col in training_features.columns:
             if col == 'ed_amount':
-                # Add explicit range constraints for ed_amount to preserve scale
+                # Get actual amount ranges
                 actual_min = float(training_features[col].min())
                 actual_max = float(training_features[col].max())
                 print(f"  Setting ed_amount constraints: ${actual_min:.2f} to ${actual_max:,.2f}")
                 
-                metadata.update_column(col, sdtype='numerical')
-                # Force the CTVAE to respect actual amount ranges
-                metadata.add_column_constraint(
-                    column_name=col,
-                    constraint_class='Range',
-                    constraint_parameters={
-                        'low_value': actual_min,
-                        'high_value': actual_max,
-                        'strict_boundaries': True
-                    }
+                # Configure with explicit range constraints using correct SDV syntax
+                metadata.update_column(
+                    col, 
+                    sdtype='numerical',
+                    computer_representation='Float'
                 )
+                
+                # Add constraint using correct SDV method
+                from sdv.constraints import create_constraint
+                constraint = create_constraint(
+                    constraint_class='Range',
+                    column_names=[col],
+                    low_value=actual_min,
+                    high_value=actual_max,
+                    strict_boundaries=True
+                )
+                metadata.add_constraint(constraint)
+                
             else:
                 metadata.update_column(col, sdtype='numerical')
     
