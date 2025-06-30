@@ -1,1 +1,2 @@
-#t
+print(f"Real payers: {training_data_weighted['payer_Company_Name'].unique()[:5]}")
+print(f"Synthetic payers: {synthetic_data['payer_Company_Name'].unique()[:5]}")
