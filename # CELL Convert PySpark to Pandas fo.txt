@@ -1,2 +1,86 @@
-print(f"Real payers: {training_data_weighted['payer_Company_Name'].unique()[:5]}")
-print(f"Synthetic payers: {synthetic_data['payer_Company_Name'].unique()[:5]}")
+# =============================================================================
+# CELL 9: CTVAE COMPANY CROSS-TABULATION ANALYSIS (FIXED DISPLAY)
+# =============================================================================
+
+# CONFIGURATION PARAMETER
+ANALYSIS_DAY = "all_days"
+
+# Create copies 
+real_data = training_data_weighted.copy()
+synth_data = synthetic_data.copy()
+
+# Fix numeric conversion
+real_data['ed_amount'] = pd.to_numeric(real_data['ed_amount'], errors='coerce').fillna(0)
+synth_data['ed_amount'] = pd.to_numeric(synth_data['ed_amount'], errors='coerce').fillna(0)
+
+print("🏢 CTVAE COMPANY CROSS-TABULATION ANALYSIS")
+print("=" * 50)
+
+# =============================================
+# 1. ORIGINAL DATA - PAYER vs PAYEE COMPANIES
+# =============================================
+print(f"\n🏢 ORIGINAL DATA - PAYER vs PAYEE COMPANIES:")
+
+# Count cross-tabulation - WITH EXPLICIT INDEX NAMES
+orig_company_count_crosstab = pd.crosstab(
+    real_data['payer_Company_Name'],
+    real_data['payee_Company_Name'],
+    margins=True,
+    margins_name='Total'
+)
+# CRITICAL FIX: Set index and column names explicitly
+orig_company_count_crosstab.index.name = 'payer_Company_Name'
+orig_company_count_crosstab.columns.name = 'payee_Company_Name'
+
+print(f"\n📊 TRANSACTION COUNT CROSS-TABULATION (Original):")
+display(orig_company_count_crosstab)
+
+# Amount cross-tabulation
+orig_company_amount_crosstab = pd.crosstab(
+    real_data['payer_Company_Name'],
+    real_data['payee_Company_Name'],
+    values=real_data['ed_amount'],
+    aggfunc='sum',
+    margins=True,
+    margins_name='Total'
+).round(0)
+orig_company_amount_crosstab.index.name = 'payer_Company_Name'
+orig_company_amount_crosstab.columns.name = 'payee_Company_Name'
+
+print(f"\n💰 TOTAL AMOUNT CROSS-TABULATION (Original):")
+display(orig_company_amount_crosstab)
+
+# =============================================
+# 2. SYNTHETIC DATA - PAYER vs PAYEE COMPANIES
+# =============================================
+print(f"\n🤖 SYNTHETIC DATA - PAYER vs PAYEE COMPANIES:")
+
+# Count cross-tabulation
+synth_company_count_crosstab = pd.crosstab(
+    synth_data['payer_Company_Name'],
+    synth_data['payee_Company_Name'],
+    margins=True,
+    margins_name='Total'
+)
+synth_company_count_crosstab.index.name = 'payer_Company_Name'
+synth_company_count_crosstab.columns.name = 'payee_Company_Name'
+
+print(f"\n📊 TRANSACTION COUNT CROSS-TABULATION (Synthetic):")
+display(synth_company_count_crosstab)
+
+# Amount cross-tabulation
+synth_company_amount_crosstab = pd.crosstab(
+    synth_data['payer_Company_Name'],
+    synth_data['payee_Company_Name'],
+    values=synth_data['ed_amount'],
+    aggfunc='sum',
+    margins=True,
+    margins_name='Total'
+).round(0)
+synth_company_amount_crosstab.index.name = 'payer_Company_Name'
+synth_company_amount_crosstab.columns.name = 'payee_Company_Name'
+
+print(f"\n💰 TOTAL AMOUNT CROSS-TABULATION (Synthetic):")
+display(synth_company_amount_crosstab)
+
+print(f"\n✅ COMPANY CROSS-TABULATION ANALYSIS COMPLETE")
