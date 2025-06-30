@@ -1,1 +1,350 @@
-#t
+# =============================================================================
+# CELL 9: CTVAE COMPLETE CROSS-TABULATION ANALYSIS WITH TOTALS
+# =============================================================================
+
+# CONFIGURATION PARAMETERS - Modify these to control analysis
+ANALYSIS_DAY = "all_days"  # Options: "all_days", "day_1", "day_2", "day_3", etc.
+DAY_OF_WEEK_FILTER = "all_days"  # Options: "all_days", "Monday", "Tuesday", etc.
+DAY_OF_MONTH_FILTER = "all_days"  # Options: "all_days", 1, 2, 3, ..., 31
+
+# Create copies to avoid modifying original data
+real_data = training_data_weighted.copy()
+synth_data = synthetic_data.copy()
+
+# Fix numeric conversion
+real_data['ed_amount'] = pd.to_numeric(real_data['ed_amount'], errors='coerce').fillna(0)
+synth_data['ed_amount'] = pd.to_numeric(synth_data['ed_amount'], errors='coerce').fillna(0)
+
+print("CTVAE COMPLETE CROSS-TABULATION ANALYSIS WITH TOTALS")
+print("=" * 70)
+
+# Ensure temporal columns exist
+if 'day_of_week' not in real_data.columns:
+    real_data['date_parsed'] = pd.to_datetime(real_data['fh_file_creation_date'], format='%y%m%d', errors='coerce')
+    real_data['day_of_week'] = real_data['date_parsed'].dt.dayofweek
+    real_data['day_of_month'] = real_data['date_parsed'].dt.day
+
+if 'day_of_week' not in synth_data.columns:
+    synth_data['date_parsed'] = pd.to_datetime(synth_data['fh_file_creation_date'], format='%y%m%d', errors='coerce')
+    synth_data['day_of_week'] = synth_data['date_parsed'].dt.dayofweek
+    synth_data['day_of_month'] = synth_data['date_parsed'].dt.day
+
+# Create day name mapping
+day_names = {0: 'Monday', 1: 'Tuesday', 2: 'Wednesday', 3: 'Thursday', 4: 'Friday', 5: 'Saturday', 6: 'Sunday'}
+real_data['day_name'] = real_data['day_of_week'].map(day_names)
+synth_data['day_name'] = synth_data['day_of_week'].map(day_names)
+
+# Apply filters
+filtered_real = real_data.copy()
+filtered_synth = synth_data.copy()
+
+# Day filtering logic
+if ANALYSIS_DAY != "all_days":
+    day_num = int(ANALYSIS_DAY.split("_")[1])
+    unique_dates = sorted(real_data['fh_file_creation_date'].unique())
+    if day_num <= len(unique_dates):
+        selected_date = unique_dates[day_num - 1]
+        filtered_real = filtered_real[filtered_real['fh_file_creation_date'] == selected_date].copy()
+        filtered_synth = filtered_synth[filtered_synth['fh_file_creation_date'] == selected_date].copy()
+        print(f"Analysis for DAY {day_num} (Date: {selected_date})")
+
+# Day of week filtering
+if DAY_OF_WEEK_FILTER != "all_days":
+    filtered_real = filtered_real[filtered_real['day_name'] == DAY_OF_WEEK_FILTER].copy()
+    filtered_synth = filtered_synth[filtered_synth['day_name'] == DAY_OF_WEEK_FILTER].copy()
+    print(f"Filtered by Day of Week: {DAY_OF_WEEK_FILTER}")
+
+# Day of month filtering
+if DAY_OF_MONTH_FILTER != "all_days":
+    filtered_real = filtered_real[filtered_real['day_of_month'] == DAY_OF_MONTH_FILTER].copy()
+    filtered_synth = filtered_synth[filtered_synth['day_of_month'] == DAY_OF_MONTH_FILTER].copy()
+    print(f"Filtered by Day of Month: {DAY_OF_MONTH_FILTER}")
+
+print(f"Filtered Real Data: {len(filtered_real):,} transactions")
+print(f"Filtered Synthetic Data: {len(filtered_synth):,} transactions")
+
+# =============================================
+# 1. TOTAL AMOUNT CROSS-TABULATION ANALYSIS (ORIGINAL)
+# =============================================
+print("\n" + "=" * 70)
+print("TOTAL AMOUNT CROSS-TABULATION ANALYSIS")
+print("=" * 70)
+
+# Original data - Amount cross-tabulation
+orig_company_amount_crosstab = pd.crosstab(
+    filtered_real['payer_Company_Name'],
+    filtered_real['payee_Company_Name'],
+    values=filtered_real['ed_amount'],
+    aggfunc='sum',
+    margins=True,
+    margins_name='Total'
+).round(0)
+orig_amount_display = orig_company_amount_crosstab.reset_index()
+print("\nTOTAL AMOUNT CROSS-TABULATION (Real Data):")
+display(orig_amount_display)
+
+# Synthetic data - Amount cross-tabulation
+synth_company_amount_crosstab = pd.crosstab(
+    filtered_synth['payer_Company_Name'],
+    filtered_synth['payee_Company_Name'],
+    values=filtered_synth['ed_amount'],
+    aggfunc='sum',
+    margins=True,
+    margins_name='Total'
+).round(0)
+synth_amount_display = synth_company_amount_crosstab.reset_index()
+print("\nTOTAL AMOUNT CROSS-TABULATION (Synthetic Data):")
+display(synth_amount_display)
+
+# =============================================
+# 2. TRANSACTION COUNT CROSS-TABULATION ANALYSIS (ORIGINAL)
+# =============================================
+print("\n" + "=" * 70)
+print("TRANSACTION COUNT CROSS-TABULATION ANALYSIS")
+print("=" * 70)
+
+# Original data - Count cross-tabulation
+orig_company_count_crosstab = pd.crosstab(
+    filtered_real['payer_Company_Name'],
+    filtered_real['payee_Company_Name'],
+    margins=True,
+    margins_name='Total'
+)
+orig_count_display = orig_company_count_crosstab.reset_index()
+print("\nTRANSACTION COUNT CROSS-TABULATION (Real Data):")
+display(orig_count_display)
+
+# Synthetic data - Count cross-tabulation
+synth_company_count_crosstab = pd.crosstab(
+    filtered_synth['payer_Company_Name'],
+    filtered_synth['payee_Company_Name'],
+    margins=True,
+    margins_name='Total'
+)
+synth_count_display = synth_company_count_crosstab.reset_index()
+print("\nTRANSACTION COUNT CROSS-TABULATION (Synthetic Data):")
+display(synth_count_display)
+
+# =============================================
+# 3. AVERAGE AMOUNT CROSS-TABULATION ANALYSIS (ORIGINAL)
+# =============================================
+print("\n" + "=" * 70)
+print("AVERAGE AMOUNT PER TRANSACTION CROSS-TABULATION ANALYSIS")
+print("=" * 70)
+
+# Original data - Average amount cross-tabulation
+orig_company_avg_crosstab = pd.crosstab(
+    filtered_real['payer_Company_Name'],
+    filtered_real['payee_Company_Name'],
+    values=filtered_real['ed_amount'],
+    aggfunc='mean',
+    margins=True,
+    margins_name='Total'
+).round(0)
+orig_avg_display = orig_company_avg_crosstab.reset_index()
+print("\nAVERAGE AMOUNT PER TRANSACTION CROSS-TABULATION (Real Data):")
+display(orig_avg_display)
+
+# Synthetic data - Average amount cross-tabulation
+synth_company_avg_crosstab = pd.crosstab(
+    filtered_synth['payer_Company_Name'],
+    filtered_synth['payee_Company_Name'],
+    values=filtered_synth['ed_amount'],
+    aggfunc='mean',
+    margins=True,
+    margins_name='Total'
+).round(0)
+synth_avg_display = synth_company_avg_crosstab.reset_index()
+print("\nAVERAGE AMOUNT PER TRANSACTION CROSS-TABULATION (Synthetic Data):")
+display(synth_avg_display)
+
+# =============================================
+# 4. TOTAL AMOUNT BY DAY OF WEEK ANALYSIS (NEW)
+# =============================================
+print("\n" + "=" * 70)
+print("TOTAL AMOUNT BY DAY OF WEEK ANALYSIS")
+print("=" * 70)
+
+# Real data by day of week
+real_amount_by_dow = real_data.groupby('day_name')['ed_amount'].sum().round(0)
+real_amount_dow_df = pd.DataFrame({
+    'Day_of_Week': real_amount_by_dow.index,
+    'Real_Total_Amount': real_amount_by_dow.values
+})
+
+# Synthetic data by day of week
+synth_amount_by_dow = synth_data.groupby('day_name')['ed_amount'].sum().round(0)
+synth_amount_dow_df = pd.DataFrame({
+    'Day_of_Week': synth_amount_by_dow.index,
+    'Synthetic_Total_Amount': synth_amount_by_dow.values
+})
+
+# Merge real and synthetic
+amount_dow_comparison = pd.merge(real_amount_dow_df, synth_amount_dow_df, on='Day_of_Week', how='outer').fillna(0)
+amount_dow_comparison['Difference'] = amount_dow_comparison['Synthetic_Total_Amount'] - amount_dow_comparison['Real_Total_Amount']
+amount_dow_comparison['Percentage_Diff'] = ((amount_dow_comparison['Synthetic_Total_Amount'] - amount_dow_comparison['Real_Total_Amount']) / (amount_dow_comparison['Real_Total_Amount'] + 1) * 100).round(1)
+
+# Add total row
+total_row_dow_amount = pd.DataFrame({
+    'Day_of_Week': ['TOTAL'],
+    'Real_Total_Amount': [amount_dow_comparison['Real_Total_Amount'].sum()],
+    'Synthetic_Total_Amount': [amount_dow_comparison['Synthetic_Total_Amount'].sum()],
+    'Difference': [amount_dow_comparison['Difference'].sum()],
+    'Percentage_Diff': [((amount_dow_comparison['Synthetic_Total_Amount'].sum() - amount_dow_comparison['Real_Total_Amount'].sum()) / (amount_dow_comparison['Real_Total_Amount'].sum() + 1) * 100).round(1)]
+})
+amount_dow_comparison_with_total = pd.concat([amount_dow_comparison, total_row_dow_amount], ignore_index=True)
+
+print("\nTOTAL AMOUNT BY DAY OF WEEK (Real vs Synthetic):")
+display(amount_dow_comparison_with_total)
+
+# =============================================
+# 5. TRANSACTION COUNT BY DAY OF WEEK ANALYSIS (NEW)
+# =============================================
+print("\n" + "=" * 70)
+print("TRANSACTION COUNT BY DAY OF WEEK ANALYSIS")
+print("=" * 70)
+
+# Real data by day of week
+real_count_by_dow = real_data['day_name'].value_counts().sort_index()
+real_count_dow_df = pd.DataFrame({
+    'Day_of_Week': real_count_by_dow.index,
+    'Real_Transaction_Count': real_count_by_dow.values
+})
+
+# Synthetic data by day of week
+synth_count_by_dow = synth_data['day_name'].value_counts().sort_index()
+synth_count_dow_df = pd.DataFrame({
+    'Day_of_Week': synth_count_by_dow.index,
+    'Synthetic_Transaction_Count': synth_count_by_dow.values
+})
+
+# Merge real and synthetic
+count_dow_comparison = pd.merge(real_count_dow_df, synth_count_dow_df, on='Day_of_Week', how='outer').fillna(0)
+count_dow_comparison['Difference'] = count_dow_comparison['Synthetic_Transaction_Count'] - count_dow_comparison['Real_Transaction_Count']
+count_dow_comparison['Percentage_Diff'] = ((count_dow_comparison['Synthetic_Transaction_Count'] - count_dow_comparison['Real_Transaction_Count']) / (count_dow_comparison['Real_Transaction_Count'] + 1) * 100).round(1)
+
+# Add total row
+total_row_dow_count = pd.DataFrame({
+    'Day_of_Week': ['TOTAL'],
+    'Real_Transaction_Count': [count_dow_comparison['Real_Transaction_Count'].sum()],
+    'Synthetic_Transaction_Count': [count_dow_comparison['Synthetic_Transaction_Count'].sum()],
+    'Difference': [count_dow_comparison['Difference'].sum()],
+    'Percentage_Diff': [((count_dow_comparison['Synthetic_Transaction_Count'].sum() - count_dow_comparison['Real_Transaction_Count'].sum()) / (count_dow_comparison['Real_Transaction_Count'].sum() + 1) * 100).round(1)]
+})
+count_dow_comparison_with_total = pd.concat([count_dow_comparison, total_row_dow_count], ignore_index=True)
+
+print("\nTRANSACTION COUNT BY DAY OF WEEK (Real vs Synthetic):")
+display(count_dow_comparison_with_total)
+
+# =============================================
+# 6. TOTAL AMOUNT BY DAY OF MONTH ANALYSIS (NEW)
+# =============================================
+print("\n" + "=" * 70)
+print("TOTAL AMOUNT BY DAY OF MONTH ANALYSIS")
+print("=" * 70)
+
+# Real data by day of month
+real_amount_by_dom = real_data.groupby('day_of_month')['ed_amount'].sum().round(0)
+real_amount_dom_df = pd.DataFrame({
+    'Day_of_Month': real_amount_by_dom.index,
+    'Real_Total_Amount': real_amount_by_dom.values
+})
+
+# Synthetic data by day of month
+synth_amount_by_dom = synth_data.groupby('day_of_month')['ed_amount'].sum().round(0)
+synth_amount_dom_df = pd.DataFrame({
+    'Day_of_Month': synth_amount_by_dom.index,
+    'Synthetic_Total_Amount': synth_amount_by_dom.values
+})
+
+# Merge real and synthetic
+amount_dom_comparison = pd.merge(real_amount_dom_df, synth_amount_dom_df, on='Day_of_Month', how='outer').fillna(0)
+amount_dom_comparison['Difference'] = amount_dom_comparison['Synthetic_Total_Amount'] - amount_dom_comparison['Real_Total_Amount']
+amount_dom_comparison['Percentage_Diff'] = ((amount_dom_comparison['Synthetic_Total_Amount'] - amount_dom_comparison['Real_Total_Amount']) / (amount_dom_comparison['Real_Total_Amount'] + 1) * 100).round(1)
+
+# Add total row
+total_row_dom_amount = pd.DataFrame({
+    'Day_of_Month': ['TOTAL'],
+    'Real_Total_Amount': [amount_dom_comparison['Real_Total_Amount'].sum()],
+    'Synthetic_Total_Amount': [amount_dom_comparison['Synthetic_Total_Amount'].sum()],
+    'Difference': [amount_dom_comparison['Difference'].sum()],
+    'Percentage_Diff': [((amount_dom_comparison['Synthetic_Total_Amount'].sum() - amount_dom_comparison['Real_Total_Amount'].sum()) / (amount_dom_comparison['Real_Total_Amount'].sum() + 1) * 100).round(1)]
+})
+amount_dom_comparison_with_total = pd.concat([amount_dom_comparison, total_row_dom_amount], ignore_index=True)
+
+print("\nTOTAL AMOUNT BY DAY OF MONTH (Real vs Synthetic):")
+display(amount_dom_comparison_with_total)
+
+# =============================================
+# 7. TRANSACTION COUNT BY DAY OF MONTH ANALYSIS (NEW)
+# =============================================
+print("\n" + "=" * 70)
+print("TRANSACTION COUNT BY DAY OF MONTH ANALYSIS")
+print("=" * 70)
+
+# Real data by day of month
+real_count_by_dom = real_data['day_of_month'].value_counts().sort_index()
+real_count_dom_df = pd.DataFrame({
+    'Day_of_Month': real_count_by_dom.index,
+    'Real_Transaction_Count': real_count_by_dom.values
+})
+
+# Synthetic data by day of month
+synth_count_by_dom = synth_data['day_of_month'].value_counts().sort_index()
+synth_count_dom_df = pd.DataFrame({
+    'Day_of_Month': synth_count_by_dom.index,
+    'Synthetic_Transaction_Count': synth_count_by_dom.values
+})
+
+# Merge real and synthetic
+count_dom_comparison = pd.merge(real_count_dom_df, synth_count_dom_df, on='Day_of_Month', how='outer').fillna(0)
+count_dom_comparison['Difference'] = count_dom_comparison['Synthetic_Transaction_Count'] - count_dom_comparison['Real_Transaction_Count']
+count_dom_comparison['Percentage_Diff'] = ((count_dom_comparison['Synthetic_Transaction_Count'] - count_dom_comparison['Real_Transaction_Count']) / (count_dom_comparison['Real_Transaction_Count'] + 1) * 100).round(1)
+
+# Add total row
+total_row_dom_count = pd.DataFrame({
+    'Day_of_Month': ['TOTAL'],
+    'Real_Transaction_Count': [count_dom_comparison['Real_Transaction_Count'].sum()],
+    'Synthetic_Transaction_Count': [count_dom_comparison['Synthetic_Transaction_Count'].sum()],
+    'Difference': [count_dom_comparison['Difference'].sum()],
+    'Percentage_Diff': [((count_dom_comparison['Synthetic_Transaction_Count'].sum() - count_dom_comparison['Real_Transaction_Count'].sum()) / (count_dom_comparison['Real_Transaction_Count'].sum() + 1) * 100).round(1)]
+})
+count_dom_comparison_with_total = pd.concat([count_dom_comparison, total_row_dom_count], ignore_index=True)
+
+print("\nTRANSACTION COUNT BY DAY OF MONTH (Real vs Synthetic):")
+display(count_dom_comparison_with_total)
+
+# =============================================
+# SUMMARY AND CONFIGURATION
+# =============================================
+print("\n" + "=" * 70)
+print("ANALYSIS CONFIGURATION SUMMARY")
+print("=" * 70)
+
+print(f"Current Settings:")
+print(f"  ANALYSIS_DAY: {ANALYSIS_DAY}")
+print(f"  DAY_OF_WEEK_FILTER: {DAY_OF_WEEK_FILTER}")
+print(f"  DAY_OF_MONTH_FILTER: {DAY_OF_MONTH_FILTER}")
+
+# Quick summary stats
+orig_unique_payers = filtered_real['payer_Company_Name'].nunique()
+orig_unique_payees = filtered_real['payee_Company_Name'].nunique()
+synth_unique_payers = filtered_synth['payer_Company_Name'].nunique()
+synth_unique_payees = filtered_synth['payee_Company_Name'].nunique()
+
+print(f"\nCompany Diversity Summary:")
+print(f"  Real Data: {orig_unique_payers} payers, {orig_unique_payees} payees")
+print(f"  Synthetic Data: {synth_unique_payers} payers, {synth_unique_payees} payees")
+
+print(f"\nDataset Sizes:")
+print(f"  Filtered Real Data: {len(filtered_real):,} transactions")
+print(f"  Filtered Synthetic Data: {len(filtered_synth):,} transactions")
+print(f"  Full Real Data: {len(real_data):,} transactions")
+print(f"  Full Synthetic Data: {len(synth_data):,} transactions")
+
+print(f"\nTo modify analysis:")
+print(f"  Change ANALYSIS_DAY to: 'day_1', 'day_2', etc.")
+print(f"  Change DAY_OF_WEEK_FILTER to: 'Monday', 'Tuesday', etc.")
+print(f"  Change DAY_OF_MONTH_FILTER to: 1, 2, 3, ..., 31")
+
+print("\nCOMPLETE CROSS-TABULATION ANALYSIS WITH TOTALS FINISHED")
