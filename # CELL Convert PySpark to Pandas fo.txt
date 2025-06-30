@@ -1,5 +1,5 @@
 # =============================================================================
-# CELL 9: CTVAE TEMPORAL CROSS-TABULATION ANALYSIS (COMPLETE)
+# CELL 9: CTVAE COMPLETE CROSS-TABULATION ANALYSIS
 # =============================================================================
 
 # CONFIGURATION PARAMETERS - Modify these to control analysis
@@ -15,7 +15,7 @@ synth_data = synthetic_data.copy()
 real_data['ed_amount'] = pd.to_numeric(real_data['ed_amount'], errors='coerce').fillna(0)
 synth_data['ed_amount'] = pd.to_numeric(synth_data['ed_amount'], errors='coerce').fillna(0)
 
-print("CTVAE TEMPORAL CROSS-TABULATION ANALYSIS")
+print("CTVAE COMPLETE CROSS-TABULATION ANALYSIS")
 print("=" * 60)
 
 # Ensure temporal columns exist
@@ -64,7 +64,102 @@ print(f"Filtered Real Data: {len(filtered_real):,} transactions")
 print(f"Filtered Synthetic Data: {len(filtered_synth):,} transactions")
 
 # =============================================
-# 1. TOTAL AMOUNT BY DAY OF WEEK ANALYSIS
+# 1. TOTAL AMOUNT CROSS-TABULATION ANALYSIS (ORIGINAL)
+# =============================================
+print("\n" + "=" * 60)
+print("TOTAL AMOUNT CROSS-TABULATION ANALYSIS")
+print("=" * 60)
+
+# Original data - Amount cross-tabulation
+orig_company_amount_crosstab = pd.crosstab(
+    filtered_real['payer_Company_Name'],
+    filtered_real['payee_Company_Name'],
+    values=filtered_real['ed_amount'],
+    aggfunc='sum',
+    margins=True,
+    margins_name='Total'
+).round(0)
+orig_amount_display = orig_company_amount_crosstab.reset_index()
+print("\nTOTAL AMOUNT CROSS-TABULATION (Real Data):")
+display(orig_amount_display)
+
+# Synthetic data - Amount cross-tabulation
+synth_company_amount_crosstab = pd.crosstab(
+    filtered_synth['payer_Company_Name'],
+    filtered_synth['payee_Company_Name'],
+    values=filtered_synth['ed_amount'],
+    aggfunc='sum',
+    margins=True,
+    margins_name='Total'
+).round(0)
+synth_amount_display = synth_company_amount_crosstab.reset_index()
+print("\nTOTAL AMOUNT CROSS-TABULATION (Synthetic Data):")
+display(synth_amount_display)
+
+# =============================================
+# 2. TRANSACTION COUNT CROSS-TABULATION ANALYSIS (ORIGINAL)
+# =============================================
+print("\n" + "=" * 60)
+print("TRANSACTION COUNT CROSS-TABULATION ANALYSIS")
+print("=" * 60)
+
+# Original data - Count cross-tabulation
+orig_company_count_crosstab = pd.crosstab(
+    filtered_real['payer_Company_Name'],
+    filtered_real['payee_Company_Name'],
+    margins=True,
+    margins_name='Total'
+)
+orig_count_display = orig_company_count_crosstab.reset_index()
+print("\nTRANSACTION COUNT CROSS-TABULATION (Real Data):")
+display(orig_count_display)
+
+# Synthetic data - Count cross-tabulation
+synth_company_count_crosstab = pd.crosstab(
+    filtered_synth['payer_Company_Name'],
+    filtered_synth['payee_Company_Name'],
+    margins=True,
+    margins_name='Total'
+)
+synth_count_display = synth_company_count_crosstab.reset_index()
+print("\nTRANSACTION COUNT CROSS-TABULATION (Synthetic Data):")
+display(synth_count_display)
+
+# =============================================
+# 3. AVERAGE AMOUNT CROSS-TABULATION ANALYSIS (ORIGINAL)
+# =============================================
+print("\n" + "=" * 60)
+print("AVERAGE AMOUNT PER TRANSACTION CROSS-TABULATION ANALYSIS")
+print("=" * 60)
+
+# Original data - Average amount cross-tabulation
+orig_company_avg_crosstab = pd.crosstab(
+    filtered_real['payer_Company_Name'],
+    filtered_real['payee_Company_Name'],
+    values=filtered_real['ed_amount'],
+    aggfunc='mean',
+    margins=True,
+    margins_name='Total'
+).round(0)
+orig_avg_display = orig_company_avg_crosstab.reset_index()
+print("\nAVERAGE AMOUNT PER TRANSACTION CROSS-TABULATION (Real Data):")
+display(orig_avg_display)
+
+# Synthetic data - Average amount cross-tabulation
+synth_company_avg_crosstab = pd.crosstab(
+    filtered_synth['payer_Company_Name'],
+    filtered_synth['payee_Company_Name'],
+    values=filtered_synth['ed_amount'],
+    aggfunc='mean',
+    margins=True,
+    margins_name='Total'
+).round(0)
+synth_avg_display = synth_company_avg_crosstab.reset_index()
+print("\nAVERAGE AMOUNT PER TRANSACTION CROSS-TABULATION (Synthetic Data):")
+display(synth_avg_display)
+
+# =============================================
+# 4. TOTAL AMOUNT BY DAY OF WEEK ANALYSIS (NEW)
 # =============================================
 print("\n" + "=" * 60)
 print("TOTAL AMOUNT BY DAY OF WEEK ANALYSIS")
@@ -93,7 +188,7 @@ print("\nTOTAL AMOUNT BY DAY OF WEEK (Real vs Synthetic):")
 display(amount_dow_comparison)
 
 # =============================================
-# 2. TRANSACTION COUNT BY DAY OF WEEK ANALYSIS
+# 5. TRANSACTION COUNT BY DAY OF WEEK ANALYSIS (NEW)
 # =============================================
 print("\n" + "=" * 60)
 print("TRANSACTION COUNT BY DAY OF WEEK ANALYSIS")
@@ -122,7 +217,7 @@ print("\nTRANSACTION COUNT BY DAY OF WEEK (Real vs Synthetic):")
 display(count_dow_comparison)
 
 # =============================================
-# 3. TOTAL AMOUNT BY DAY OF MONTH ANALYSIS
+# 6. TOTAL AMOUNT BY DAY OF MONTH ANALYSIS (NEW)
 # =============================================
 print("\n" + "=" * 60)
 print("TOTAL AMOUNT BY DAY OF MONTH ANALYSIS")
@@ -151,7 +246,7 @@ print("\nTOTAL AMOUNT BY DAY OF MONTH (Real vs Synthetic):")
 display(amount_dom_comparison)
 
 # =============================================
-# 4. TRANSACTION COUNT BY DAY OF MONTH ANALYSIS
+# 7. TRANSACTION COUNT BY DAY OF MONTH ANALYSIS (NEW)
 # =============================================
 print("\n" + "=" * 60)
 print("TRANSACTION COUNT BY DAY OF MONTH ANALYSIS")
@@ -180,37 +275,6 @@ print("\nTRANSACTION COUNT BY DAY OF MONTH (Real vs Synthetic):")
 display(count_dom_comparison)
 
 # =============================================
-# 5. COMPANY CROSS-TABULATION (FILTERED DATA)
-# =============================================
-print("\n" + "=" * 60)
-print("COMPANY CROSS-TABULATION (FILTERED DATA)")
-print("=" * 60)
-
-if len(filtered_real) > 0 and len(filtered_synth) > 0:
-    # Count cross-tabulation for filtered data
-    orig_company_count_crosstab = pd.crosstab(
-        filtered_real['payer_Company_Name'],
-        filtered_real['payee_Company_Name'],
-        margins=True,
-        margins_name='Total'
-    )
-    orig_count_display = orig_company_count_crosstab.reset_index()
-    print("\nTRANSACTION COUNT CROSS-TABULATION (Filtered Real Data):")
-    display(orig_count_display)
-
-    synth_company_count_crosstab = pd.crosstab(
-        filtered_synth['payer_Company_Name'],
-        filtered_synth['payee_Company_Name'],
-        margins=True,
-        margins_name='Total'
-    )
-    synth_count_display = synth_company_count_crosstab.reset_index()
-    print("\nTRANSACTION COUNT CROSS-TABULATION (Filtered Synthetic Data):")
-    display(synth_count_display)
-else:
-    print("No data available for current filter settings")
-
-# =============================================
 # SUMMARY AND CONFIGURATION
 # =============================================
 print("\n" + "=" * 60)
@@ -222,9 +286,19 @@ print(f"  ANALYSIS_DAY: {ANALYSIS_DAY}")
 print(f"  DAY_OF_WEEK_FILTER: {DAY_OF_WEEK_FILTER}")
 print(f"  DAY_OF_MONTH_FILTER: {DAY_OF_MONTH_FILTER}")
 
+# Quick summary stats
+orig_unique_payers = filtered_real['payer_Company_Name'].nunique()
+orig_unique_payees = filtered_real['payee_Company_Name'].nunique()
+synth_unique_payers = filtered_synth['payer_Company_Name'].nunique()
+synth_unique_payees = filtered_synth['payee_Company_Name'].nunique()
+
+print(f"\nCompany Diversity Summary:")
+print(f"  Real Data: {orig_unique_payers} payers, {orig_unique_payees} payees")
+print(f"  Synthetic Data: {synth_unique_payers} payers, {synth_unique_payees} payees")
+
 print(f"\nTo modify analysis:")
 print(f"  Change ANALYSIS_DAY to: 'day_1', 'day_2', etc.")
 print(f"  Change DAY_OF_WEEK_FILTER to: 'Monday', 'Tuesday', etc.")
 print(f"  Change DAY_OF_MONTH_FILTER to: 1, 2, 3, ..., 31")
 
-print("\nTEMPORAL CROSS-TABULATION ANALYSIS COMPLETE")
+print("\nCOMPLETE CROSS-TABULATION ANALYSIS FINISHED")
