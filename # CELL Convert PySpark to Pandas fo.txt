@@ -1,1 +1,155 @@
-#t
+# =============================================================================
+# CTVAE TRAINING ENGINE (CONDITIONAL TVAE) - SIMPLIFIED VERSION
+# Uses TVAESynthesizer with proper amount handling
+# =============================================================================
+
+def train_production_ctvae(df, conditional_column, epochs, compress_dims, decompress_dims, l2_scale, batch_size, loss_factor):
+    """Train production CTVAE with simplified but effective configuration"""
+    
+    if df is None or len(df) == 0:
+        raise ValueError("No training data for CTVAE")
+    
+    print(f"\n🚀 CTVAE TRAINING ENGINE")
+    print(f"Model: TVAESynthesizer (Conditional TVAE, NOT CTGAN)")
+    print(f"Training Data: {len(df):,} rows")
+    print(f"Conditional Column: {conditional_column}")
+    print(f"Configuration:")
+    print(f"  epochs={epochs}, compress_dims={compress_dims}")
+    print(f"  decompress_dims={decompress_dims}, l2scale={l2_scale}")
+    print(f"  batch_size={batch_size}, loss_factor={loss_factor}")
+    
+    # Validate conditional column
+    if conditional_column not in df.columns:
+        raise ValueError(f"Conditional column '{conditional_column}' not found")
+    
+    unique_conditions = df[conditional_column].nunique()
+    condition_values = sorted(df[conditional_column].unique())
+    
+    print(f"\n📊 Conditional Analysis:")
+    print(f"  Conditions: {unique_conditions} unique values")
+    print(f"  Values: {condition_values[:10]}{'...' if len(condition_values) > 10 else ''}")
+    
+    # Show condition distribution
+    condition_dist = df[conditional_column].value_counts().sort_index()
+    print(f"\n📈 Condition Distribution (Top 10):")
+    for condition, count in condition_dist.head(10).items():
+        pct = (count / len(df)) * 100
+        print(f"  {condition}: {count:,} rows ({pct:.1f}%)")
+    
+    # Prepare features (exclude metadata)
+    exclude_columns = ['weight', 'tier', 'importance_score']
+    feature_columns = [col for col in df.columns if col not in exclude_columns]
+    training_features = df[feature_columns].copy()
+    
+    print(f"\n📋 Training Features: {len(feature_columns)} columns")
+    print(f"  Excluded metadata: {exclude_columns}")
+    
+    # SIMPLIFIED: Create basic metadata without constraints
+    print(f"\n🔧 Creating CTVAE metadata (simplified approach)...")
+    metadata = SingleTableMetadata()
+    metadata.detect_from_dataframe(training_features)
+    
+    # Store amount statistics for later validation
+    amount_stats = {
+        'min': float(training_features['ed_amount'].min()),
+        'max': float(training_features['ed_amount'].max()),
+        'mean': float(training_features['ed_amount'].mean()),
+        'std': float(training_features['ed_amount'].std())
+    }
+    print(f"Amount stats: ${amount_stats['min']:.2f} to ${amount_stats['max']:,.2f}")
+    print(f"Mean: ${amount_stats['mean']:,.2f}, Std: ${amount_stats['std']:,.2f}")
+    
+    # Configure data types (no constraints to avoid syntax errors)
+    categorical_columns = [
+        'payer_Company_Name', 'payee_Company_Name', 'payer_industry', 'payee_industry',
+        'payer_GICS', 'payee_GICS', 'payer_subindustry', 'payee_subindustry', 'day_flag'
+    ]
+    
+    numerical_columns = ['ed_amount', 'fh_file_creation_date', 'fh_file_creation_time']
+    
+    # Update metadata with basic types only
+    for col in categorical_columns:
+        if col in training_features.columns:
+            metadata.update_column(col, sdtype='categorical')
+    
+    for col in numerical_columns:
+        if col in training_features.columns:
+            metadata.update_column(col, sdtype='numerical')
+    
+    # Validate metadata configuration
+    categorical_count = len([col for col in training_features.columns if metadata.columns[col]['sdtype'] == 'categorical'])
+    numerical_count = len([col for col in training_features.columns if metadata.columns[col]['sdtype'] == 'numerical'])
+    
+    print(f"✓ Metadata configured: {categorical_count} categorical, {numerical_count} numerical")
+    
+    # Initialize CTVAE with full configuration
+    print(f"\n🔧 Initializing CTVAE (TVAESynthesizer)...")
+    try:
+        synthesizer = TVAESynthesizer(
+            metadata=metadata,
+            epochs=epochs,
+            compress_dims=compress_dims,
+            decompress_dims=decompress_dims,
+            l2scale=l2_scale,
+            batch_size=batch_size,
+            loss_factor=loss_factor,
+            verbose=True
+        )
+        print(f"✓ CTVAE initialized with full configuration")
+    except Exception as e:
+        print(f"⚠️ Full config failed: {e}")
+        print(f"Trying basic configuration...")
+        synthesizer = TVAESynthesizer(
+            metadata=metadata,
+            epochs=epochs,
+            verbose=True
+        )
+        print(f"✓ CTVAE initialized with basic configuration")
+    
+    # Start training
+    print(f"\n🎯 STARTING CTVAE TRAINING...")
+    estimated_time = epochs * len(training_features) / (batch_size * 1000)
+    print(f"Estimated time: {estimated_time:.1f} minutes")
+    
+    start_time = datetime.now()
+    
+    try:
+        synthesizer.fit(training_features)
+        
+        training_time = datetime.now() - start_time
+        print(f"\n✅ CTVAE TRAINING SUCCESS")
+        print(f"Training Time: {training_time.total_seconds() / 60:.1f} minutes")
+        print(f"Model: {type(synthesizer).__name__}")
+        print(f"Trained on {len(training_features):,} samples with {unique_conditions} conditions")
+        
+        # Store amount stats for post-generation validation
+        synthesizer.amount_stats = amount_stats
+        
+        return synthesizer, metadata
+        
+    except Exception as e:
+        print(f"\n❌ CTVAE TRAINING ERROR: {e}")
+        raise
+
+# Train CTVAE model
+try:
+    ctvae_model, model_metadata = train_production_ctvae(
+        training_data_weighted,
+        CONDITIONAL_COLUMN,
+        CTVAE_EPOCHS,
+        COMPRESS_DIMS,
+        DECOMPRESS_DIMS,
+        L2_SCALE,
+        BATCH_SIZE,
+        LOSS_FACTOR
+    )
+    
+    print(f"\n🎉 CTVAE MODEL READY")
+    print(f"Model Type: {type(ctvae_model).__name__}")
+    print(f"Conditional Column: {CONDITIONAL_COLUMN}")
+    print(f"Available Conditions: {sorted(training_data_weighted[CONDITIONAL_COLUMN].unique())[:10]}")
+    print(f"Ready for conditional synthetic data generation")
+    
+except Exception as e:
+    print(f"❌ CTVAE training failed: {e}")
+    raise
