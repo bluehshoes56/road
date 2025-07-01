@@ -1,1 +1,137 @@
-#a
+# =============================================================================
+# CELL 7: Conditional Synthetic Data Generation (CORRECT API)
+# Using verified CTVAE sample() method from working notebooks
+# =============================================================================
+
+def generate_conditional_synthetic_data_correct(synthesizer, training_data, conditional_column, samples_per_condition):
+    """Generate conditional synthetic data using correct TVAE API"""
+    
+    if synthesizer is None:
+        raise ValueError("Synthesizer model is required")
+    
+    print(f"\n🎲 CONDITIONAL SYNTHETIC DATA GENERATION")
+    print(f"Model: {type(synthesizer).__name__}")
+    print(f"Conditional Column: {conditional_column}")
+    print(f"Samples per condition: {samples_per_condition}")
+    
+    # Get unique conditions from training data
+    unique_conditions = sorted(training_data[conditional_column].unique())
+    total_samples = len(unique_conditions) * samples_per_condition
+    
+    print(f"\n📅 Generation Plan:")
+    print(f"  Conditions: {len(unique_conditions)}")
+    print(f"  Total synthetic samples: {total_samples:,}")
+    
+    # Show original distribution
+    original_dist = training_data[conditional_column].value_counts().sort_index()
+    print(f"\n📊 Original Distribution (Top 10):")
+    for condition, count in original_dist.head(10).items():
+        pct = (count / len(training_data)) * 100
+        print(f"  {condition}: {count:,} original ({pct:.1f}%)")
+    
+    # Generate synthetic data using verified API
+    print(f"\n🔄 Generating synthetic data...")
+    try:
+        start_time = datetime.now()
+        
+        # CORRECT API: Use the exact pattern from your working notebooks
+        synthetic_data = synthesizer.sample(total_samples)
+        
+        generation_time = datetime.now() - start_time
+        print(f"✓ Generated {len(synthetic_data):,} rows in {generation_time.total_seconds():.1f}s")
+        
+        if len(synthetic_data) == 0:
+            raise ValueError("No synthetic data generated")
+            
+    except Exception as e:
+        print(f"❌ Generation failed: {e}")
+        raise
+
+    # Fix CTVAE amount scaling issue
+    print(f"\n🔧 FIXING AMOUNT SCALING...")
+    
+    # Calculate scaling metrics
+    real_mean = float(training_data['ed_amount'].mean())
+    real_std = float(training_data['ed_amount'].std())
+    synthetic_mean = float(synthetic_data['ed_amount'].mean())
+    synthetic_std = float(synthetic_data['ed_amount'].std())
+    
+    # Apply scaling correction
+    scaling_factor = real_mean / synthetic_mean
+    
+    print(f"  Real stats: Mean=${real_mean:,.2f}, Std=${real_std:,.2f}")
+    print(f"  Synthetic stats (before): Mean=${synthetic_mean:,.2f}, Std=${synthetic_std:,.2f}")
+    print(f"  Scaling factor: {scaling_factor:.3f}")
+    
+    # Correct the amounts
+    synthetic_data['ed_amount'] *= scaling_factor
+    
+    # Verify correction
+    corrected_mean = float(synthetic_data['ed_amount'].mean())
+    difference_pct = abs(corrected_mean - real_mean) / real_mean * 100
+    print(f"  After correction: Mean=${corrected_mean:,.2f} ({difference_pct:.1f}% difference)")
+
+    # Show generated distribution
+    synthetic_dist = synthetic_data[conditional_column].value_counts().sort_index()
+    print(f"\n📊 Generated Distribution:")
+    for condition in unique_conditions[:10]:
+        original_count = original_dist.get(condition, 0)
+        synthetic_count = synthetic_dist.get(condition, 0)
+        print(f"  {condition}: {original_count} original → {synthetic_count} synthetic")
+
+    print(f"\n✅ SYNTHETIC GENERATION SUCCESS")
+    print(f"Total rows: {len(synthetic_data):,}")
+    print(f"Unique conditions: {synthetic_data[conditional_column].nunique()}")
+    print(f"Unique payers: {synthetic_data['payer_Company_Name'].nunique()}")
+    print(f"Unique payees: {synthetic_data['payee_Company_Name'].nunique()}")
+
+    # Quality validation
+    total_nulls = synthetic_data.isnull().sum().sum()
+    total_negatives = (synthetic_data['ed_amount'] < 0).sum()
+    data_completeness = ((len(synthetic_data) * len(synthetic_data.columns) - total_nulls) / 
+                        (len(synthetic_data) * len(synthetic_data.columns))) * 100
+
+    print(f"\n🔍 Quality Assessment:")
+    print(f"  Null values: {total_nulls}")
+    print(f"  Negative amounts: {total_negatives}")
+    print(f"  Data completeness: {data_completeness:.1f}%")
+
+    # Generation statistics
+    generation_stats = [{
+        'total_rows': len(synthetic_data),
+        'unique_conditions': synthetic_data[conditional_column].nunique(),
+        'unique_payers': synthetic_data['payer_Company_Name'].nunique(),
+        'unique_payees': synthetic_data['payee_Company_Name'].nunique(),
+        'total_amount': synthetic_data['ed_amount'].sum(),
+        'avg_amount': synthetic_data['ed_amount'].mean(),
+        'generation_time_seconds': generation_time.total_seconds(),
+        'scaling_factor_applied': scaling_factor
+    }]
+    
+    generation_stats_df = pd.DataFrame(generation_stats)
+    return synthetic_data, generation_stats_df
+
+# Execute generation
+try:
+    synthetic_data, generation_stats = generate_conditional_synthetic_data_correct(
+        ctvae_model,
+        training_data_weighted,
+        CONDITIONAL_COLUMN,
+        SAMPLES_PER_CONDITION
+    )
+    
+    print(f"\n🎊 SYNTHETIC DATA READY")
+    print(f"Generated: {len(synthetic_data):,} synthetic transactions")
+    print(f"Ready for quality validation and cross-tabulation analysis")
+    
+    # Show sample
+    print(f"\n📋 Sample Synthetic Data:")
+    display(synthetic_data.head())
+    
+    # Show statistics
+    print(f"\n📊 Generation Statistics:")
+    display(generation_stats)
+    
+except Exception as e:
+    print(f"❌ Synthetic generation failed: {e}")
+    raise
