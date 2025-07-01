@@ -1,1 +1,50 @@
-#s
+# =============================================================================
+# AVERAGE AMOUNT PER TRANSACTION COMPARISON ANALYSIS (ADDED)
+# =============================================================================
+
+print("\n" + "=" * 70)
+print("AVERAGE AMOUNT PER TRANSACTION COMPARISON ANALYSIS")
+print("=" * 70)
+
+# Get common companies for comparison
+common_payers = set(filtered_real['payer_Company_Name'].unique()) & set(filtered_synth['payer_Company_Name'].unique())
+common_payees = set(filtered_real['payee_Company_Name'].unique()) & set(filtered_synth['payee_Company_Name'].unique())
+
+if len(common_payers) > 0 and len(common_payees) > 0:
+    common_payers = sorted(list(common_payers))
+    common_payees = sorted(list(common_payees))
+    
+    # Calculate average amount cross-tabulations
+    orig_avg_crosstab = pd.crosstab(
+        filtered_real['payer_Company_Name'],
+        filtered_real['payee_Company_Name'],
+        values=filtered_real['ed_amount'],
+        aggfunc='mean',
+        margins=True,
+        margins_name='Total'
+    ).round(0)
+    
+    synth_avg_crosstab = pd.crosstab(
+        filtered_synth['payer_Company_Name'],
+        filtered_synth['payee_Company_Name'],
+        values=filtered_synth['ed_amount'],
+        aggfunc='mean',
+        margins=True,
+        margins_name='Total'
+    ).round(0)
+    
+    # Average Amount Per Transaction Comparison
+    print(f"\nAVERAGE AMOUNT PER TRANSACTION COMPARISON (% Difference):")
+    orig_avg_aligned = orig_avg_crosstab.loc[common_payers, common_payees].fillna(0)
+    synth_avg_aligned = synth_avg_crosstab.loc[common_payers, common_payees].fillna(0)
+    avg_diff = ((synth_avg_aligned - orig_avg_aligned) / (orig_avg_aligned + 1e-6) * 100).round(1)
+    display(avg_diff)
+    
+    # Summary Statistics
+    print(f"\nAverage Amount Per Transaction Differences Summary:")
+    print(f"  Mean: {avg_diff.values.flatten().mean():.1f}%")
+    print(f"  Std: {avg_diff.values.flatten().std():.1f}%")
+    print(f"  Max: {avg_diff.values.flatten().max():.1f}%")
+    print(f"  Min: {avg_diff.values.flatten().min():.1f}%")
+else:
+    print("No common companies found for average amount comparison")
