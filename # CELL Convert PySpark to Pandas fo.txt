@@ -1,1 +1,81 @@
-#a
+# =============================================================================
+# AVERAGE AMOUNT BY DAY OF WEEK ANALYSIS
+# =============================================================================
+print("\n" + "=" * 70)
+print("AVERAGE AMOUNT BY DAY OF WEEK ANALYSIS")
+print("=" * 70)
+
+# Real data average amount by day of week
+real_avg_by_dow = real_data.groupby('day_name')['ed_amount'].mean().round(0)
+real_avg_dow_df = pd.DataFrame({
+    'Day_of_Week': real_avg_by_dow.index,
+    'Real_Avg_Amount': real_avg_by_dow.values
+})
+
+# Synthetic data average amount by day of week
+synth_avg_by_dow = synth_data.groupby('day_name')['ed_amount'].mean().round(0)
+synth_avg_dow_df = pd.DataFrame({
+    'Day_of_Week': synth_avg_by_dow.index,
+    'Synthetic_Avg_Amount': synth_avg_by_dow.values
+})
+
+# Merge and calculate differences
+avg_dow_comparison = pd.merge(real_avg_dow_df, synth_avg_dow_df, on='Day_of_Week', how='outer').fillna(0)
+avg_dow_comparison['Difference'] = avg_dow_comparison['Synthetic_Avg_Amount'] - avg_dow_comparison['Real_Avg_Amount']
+avg_dow_comparison['Percentage_Diff'] = ((avg_dow_comparison['Synthetic_Avg_Amount'] - avg_dow_comparison['Real_Avg_Amount']) / 
+                                        (avg_dow_comparison['Real_Avg_Amount'] + 1e-6) * 100).round(1)
+
+# Add total row
+total_row_avg_dow = pd.DataFrame({
+    'Day_of_Week': ['TOTAL'],
+    'Real_Avg_Amount': [avg_dow_comparison['Real_Avg_Amount'].mean()],
+    'Synthetic_Avg_Amount': [avg_dow_comparison['Synthetic_Avg_Amount'].mean()],
+    'Difference': [avg_dow_comparison['Difference'].mean()],
+    'Percentage_Diff': [avg_dow_comparison['Percentage_Diff'].mean()]
+})
+
+avg_dow_comparison_with_total = pd.concat([avg_dow_comparison, total_row_avg_dow], ignore_index=True)
+
+print("\nAVERAGE AMOUNT BY DAY OF WEEK (Real vs Synthetic):")
+display(avg_dow_comparison_with_total)
+
+# =============================================================================
+# AVERAGE AMOUNT BY DAY OF MONTH ANALYSIS
+# =============================================================================
+print("\n" + "=" * 70)
+print("AVERAGE AMOUNT BY DAY OF MONTH ANALYSIS")
+print("=" * 70)
+
+# Real data average amount by day of month
+real_avg_by_dom = real_data.groupby('day_of_month')['ed_amount'].mean().round(0)
+real_avg_dom_df = pd.DataFrame({
+    'Day_of_Month': real_avg_by_dom.index,
+    'Real_Avg_Amount': real_avg_by_dom.values
+})
+
+# Synthetic data average amount by day of month
+synth_avg_by_dom = synth_data.groupby('day_of_month')['ed_amount'].mean().round(0)
+synth_avg_dom_df = pd.DataFrame({
+    'Day_of_Month': synth_avg_by_dom.index,
+    'Synthetic_Avg_Amount': synth_avg_by_dom.values
+})
+
+# Merge and calculate differences
+avg_dom_comparison = pd.merge(real_avg_dom_df, synth_avg_dom_df, on='Day_of_Month', how='outer').fillna(0)
+avg_dom_comparison['Difference'] = avg_dom_comparison['Synthetic_Avg_Amount'] - avg_dom_comparison['Real_Avg_Amount']
+avg_dom_comparison['Percentage_Diff'] = ((avg_dom_comparison['Synthetic_Avg_Amount'] - avg_dom_comparison['Real_Avg_Amount']) / 
+                                        (avg_dom_comparison['Real_Avg_Amount'] + 1e-6) * 100).round(1)
+
+# Add total row
+total_row_avg_dom = pd.DataFrame({
+    'Day_of_Month': ['TOTAL'],
+    'Real_Avg_Amount': [avg_dom_comparison['Real_Avg_Amount'].mean()],
+    'Synthetic_Avg_Amount': [avg_dom_comparison['Synthetic_Avg_Amount'].mean()],
+    'Difference': [avg_dom_comparison['Difference'].mean()],
+    'Percentage_Diff': [avg_dom_comparison['Percentage_Diff'].mean()]
+})
+
+avg_dom_comparison_with_total = pd.concat([avg_dom_comparison, total_row_avg_dom], ignore_index=True)
+
+print("\nAVERAGE AMOUNT BY DAY OF MONTH (Real vs Synthetic):")
+display(avg_dom_comparison_with_total)
