@@ -1,1 +1,36 @@
-#t
+Always examine the actual implementation files first, then answer based on what the code actually does, not what I think it should do. also check the model documentation to ensure correct approach being used. dont hallucinate, or make up stuff. stay sharp, dont be lazy
+
+
+
+Specific prompting strategies to prevent this mistake:
+
+1. "Check the actual code first before answering"
+
+Forces me to examine implementation before making claims
+Example: "Check the actual CTVAE generation code first - is amount scaling being applied?"
+2. "Show me the exact line of code that does X"
+
+Requires me to provide concrete evidence
+Example: "Show me the exact line where median scaling happens"
+3. "Are you looking at the code or guessing?"
+
+Direct challenge to verify if I'm actually examining files
+Forces honesty about whether I checked implementation
+4. "Quote the actual code that supports your claim"
+
+Demands specific evidence from codebase
+Example: "Quote the code where you see median-based scaling"
+5. "Don't assume - examine [specific file] first"
+
+Direct instruction to check specific implementation
+Example: "Don't assume - examine the CTVAE notebook generation cell first"
+6. Structure questions as verification requests:
+
+"Verify in the code: does CTVAE apply amount scaling during generation?"
+"Confirm by checking: which exact columns are used as conditionals?"
+Root issue: I was pattern-matching from general knowledge instead of examining your specific implementation. These prompts force me to ground answers in actual code rather than assumptions.
+
+Are you checking all the attachment I have shared with you in last 48 hours?
+
+The key is demanding evidence upfront - any technical claim should be backed by actual code examination, not general knowledge or assumptions.
+
